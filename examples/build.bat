@@ -1,2 +1,2 @@
 @echo off
-nim r -d:nimOldCaseObjects simple.nim
+nim c -r simple.nim

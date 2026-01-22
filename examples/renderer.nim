@@ -1,6 +1,5 @@
 import ../src/microui/ui
 import glad/gl
-import glfw
 
 const
   BUFFER_SIZE = 16384
@@ -30,8 +29,7 @@ proc initRenderer*() =
   var id: GLuint
   glGenTextures(1, addr id)
   glBindTexture(GL_TEXTURE_2D, id)
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA.GLint, ATLAS_WIDTH, ATLAS_HEIGHT, 0,
-    GL_ALPHA, GL_UNSIGNED_BYTE, addr atlas_texture[0])
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA.GLint, ATLAS_WIDTH, ATLAS_HEIGHT, 0, GL_ALPHA, GL_UNSIGNED_BYTE, addr atlas_texture[0])
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST.GLint)
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST.GLint)
 

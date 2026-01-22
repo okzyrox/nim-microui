@@ -1,7 +1,9 @@
 ## microui
 
 import std/[
-  bitops
+  bitops,
+  math,
+  strformat
 ]
 
 const
@@ -17,21 +19,19 @@ const
   MICROUI_TREENODEPOOL_SIZE* = 48
   MICROUI_MAX_WIDTHS* = 16
   MICROUI_MAX_FMT* = 127
-  MICROUI_REAL_FMT* = "%.3g"
-  MICROUI_SLIDER_FMT* = "%.2f"
 
 ##/ Enums
 type MUClip* = enum
-  Partial #= 1
-  All
+  Partial = 1
+  All = 2
 
 type MUCommandType* = enum 
-  Jump #= 1
-  Clip
-  Rect
-  Text
-  Icon
-  Max
+  Jump = 0
+  Clip = 1
+  Rect = 2
+  Text = 3
+  Icon = 4
+  Max = 5
 
 type MULayoutType* = enum
   Relative
@@ -55,11 +55,11 @@ type MUElementColor* = enum
   ColorMax
 
 type MUIcon* = enum
-  Close #= 1
-  Check
-  Collapsed
-  Expanded
-  Max
+  Close = 1
+  Check = 2
+  Collapsed = 3
+  Expanded = 4
+  Max = 5
 
 type MUResult* = enum
   Active = 1 shl 0
@@ -67,7 +67,7 @@ type MUResult* = enum
   Change = 1 shl 2
 
 type MUWindowOption* = enum
-  AligneCenter = 1 shl 0
+  AlignCenter = 1 shl 0
   AlignRight = 1 shl 1
   NoInteract = 1 shl 2
   NoFrame = 1 shl 3
@@ -209,7 +209,7 @@ const
       MUColor(r: 50, g: 50, b: 50, a: 255), # ColorWindowBackground
       MUColor(r: 25, g: 25, b: 25, a: 255), # ColorTitleBackground
       MUColor(r: 240, g: 240, b: 240, a: 255), # ColorTitleText
-      MUColor(r: 0, g: 0, b: 0, a: 255), # ColorPanelBackground
+      MUColor(r: 0, g: 0, b: 0, a: 0), # ColorPanelBackground
       MUColor(r: 75, g: 75, b: 75, a: 255), # ColorButton
       MUColor(r: 95, g: 95, b: 95, a: 255), # ColorButtonHover
       MUColor(r: 115, g: 115, b: 115, a: 255), # ColorButtonFocus
@@ -221,10 +221,13 @@ const
     ]
   )
 
+proc defaultTextHeight(font: MUFont): int =
+  return 18
+
 type MUContext* = object
   ## callbacks
   text_width*: proc(font: MUFont, text: string, len: int): int
-  text_height*: proc(font: MUFont): int
+  text_height*: proc(font: MUFont): int = defaultTextHeight
   draw_frame*: proc(ctx: var MUContext, rect: MURect, colorId: int): void
 
   ## state
@@ -336,6 +339,19 @@ proc muGetId*(muCtx: var MUContext = muGlobalContext, data: openArray[byte]): ui
 proc muGetIdStr*(muCtx: var MUContext = muGlobalContext, str: string): uint =
   muGetId(muCtx, cast[seq[byte]](str))
 
+proc muGetIdPtr*(muCtx: var MUContext, data: pointer, size: int): uint =
+  if data == nil or size <= 0:
+    return muGetId(muCtx, [])
+  var bytes = newSeq[byte](size)
+  copyMem(addr bytes[0], data, size)
+  muGetId(muCtx, bytes)
+
+proc muPushIdPtr*(muCtx: var MUContext, data: pointer, size: int) =
+  let id = muGetIdPtr(muCtx, data, size)
+  if muCtx.idStack.index < MICROUI_IDSTACK_SIZE:
+    muCtx.idStack.items[muCtx.idStack.index] = id
+    muCtx.idStack.index += 1
+
 proc muPushId*(muCtx: var MUContext = muGlobalContext, data: openArray[byte]) =
   if muCtx.idStack.index < MICROUI_IDSTACK_SIZE:
     muCtx.idStack.items[muCtx.idStack.index] = muGetId(muCtx, data)
@@ -377,12 +393,11 @@ proc muPoolUpdate*(muCtx: var MUContext = muGlobalContext, items: var openArray[
 
 proc muPoolInit*(muCtx: var MUContext = muGlobalContext, items: var openArray[MUPoolItem], id: uint): int =
   var n = -1
-  let f = muCtx.frame
+  var f = muCtx.frame
   for i in 0..<items.len:
     if items[i].lastUpdate < f:
-      if n == -1:
-        n = i
-        break
+      f = items[i].lastUpdate
+      n = i
   if n > -1:
     items[n].id = id
     muPoolUpdate(muCtx, items, n)
@@ -440,8 +455,33 @@ proc muInputMouseDown*(muCtx: var MUContext = muGlobalContext, x, y: int; btn: i
   muCtx.mouseDown = bitor[int](muCtx.mouseDown, btn)
   muCtx.mousePressed = bitor[int](muCtx.mousePressed, btn)
 
+proc muInputMouseDown*(muCtx: var MUContext = muGlobalContext, x, y: int, btn: MUMouse) =
+  let btn = ord(btn)
+  muCtx.mouseDown = bitor[int](muCtx.mouseDown, btn)
+  muCtx.mousePressed = bitor[int](muCtx.mousePressed, btn)
+
+proc muInputMouseDown*(muCtx: var MUContext = muGlobalContext, btn: int) =
+  muCtx.mouseDown = bitor[int](muCtx.mouseDown, btn)
+  muCtx.mousePressed = bitor[int](muCtx.mousePressed, btn)
+
+proc muInputMouseDown*(muCtx: var MUContext = muGlobalContext, btn: MUMouse) =
+  let btn = ord(btn)
+  muCtx.mouseDown = bitor[int](muCtx.mouseDown, btn)
+  muCtx.mousePressed = bitor[int](muCtx.mousePressed, btn)
+
 proc muInputMouseUp*(muCtx: var MUContext = muGlobalContext, x, y: int; btn: int) =
   muCtx.muInputMouseMove(x, y)
+  muCtx.mouseDown = bitand[int](muCtx.mouseDown, bitnot(btn))
+
+proc muInputMouseUp*(muCtx: var MUContext = muGlobalContext, x, y: int, btn: MUMouse) =
+  let btn = ord(btn)
+  muCtx.mouseDown = bitand[int](muCtx.mouseDown, bitnot(btn))
+
+proc muInputMouseUp*(muCtx: var MUContext = muGlobalContext, btn: int) =
+  muCtx.mouseDown = bitand[int](muCtx.mouseDown, bitnot(btn))
+
+proc muInputMouseUp*(muCtx: var MUContext = muGlobalContext, btn: MUMouse) =
+  let btn = ord(btn)
   muCtx.mouseDown = bitand[int](muCtx.mouseDown, bitnot(btn))
 
 proc muInputScroll*(muCtx: var MUContext = muGlobalContext, x, y: int) =
@@ -456,38 +496,68 @@ proc muInputKeyUp*(muCtx: var MUContext = muGlobalContext, key: int) =
   muCtx.keyDown = bitand[int](muCtx.keyDown, bitnot(key))
 
 proc muInputText*(muCtx: var MUContext = muGlobalContext, text: string) =
+  var len = 0
+  while len < muCtx.inputText.len and muCtx.inputText[len] != '\0':
+    len += 1
   var i = 0
-  while i < text.len and i < muCtx.inputText.len - 1:
-    muCtx.inputText[i] = text[i]
+  while i < text.len and len + i < muCtx.inputText.len - 1:
+    muCtx.inputText[len + i] = text[i]
     i += 1
-  muCtx.inputText[i] = '\0'
+  if len + i < muCtx.inputText.len:
+    muCtx.inputText[len + i] = '\0'
 
 iterator muCommands*(muCtx: var MUContext = muGlobalContext): ptr MUBaseCommand =
-  var idx = 0
-  while idx < muCtx.commandList.index:
-    let cmd = cast[ptr MUBaseCommand](addr muCtx.commandList.items[idx])
+  var cmd = cast[ptr MUBaseCommand](addr muCtx.commandList.items[0])
+  let endPtr = cast[int](addr muCtx.commandList.items[muCtx.commandList.index])
+  while cast[int](cmd) < endPtr:
     if cmd.kind == MUCommandType.Jump:
-      idx = cast[int](cmd.destination) - cast[int](addr muCtx.commandList.items[0])
-    else:
-      yield cmd
-      idx += cmd.size
+      cmd = cast[ptr MUBaseCommand](cmd.destination)
+      continue
+    yield cmd
+    cmd = cast[ptr MUBaseCommand](cast[int](cmd) + cmd.size)
+
+proc muNextCommand*(muCtx: var MUContext = muGlobalContext, cmd: var ptr MUBaseCommand): bool =
+  let endPtr = cast[int](addr muCtx.commandList.items[muCtx.commandList.index])
+  if cmd != nil:
+    cmd = cast[ptr MUBaseCommand](cast[int](cmd) + cmd.size)
+  else:
+    cmd = cast[ptr MUBaseCommand](addr muCtx.commandList.items[0])
+  while cast[int](cmd) < endPtr:
+    if cmd.kind != MUCommandType.Jump:
+      return true
+    cmd = cast[ptr MUBaseCommand](cmd.destination)
+  cmd = nil
+  return false
+
+proc pushJump(muCtx: var MUContext, dest: pointer): ptr MUBaseCommand =
+  if muCtx.commandList.index + sizeof(MUBaseCommand) > MICROUI_COMMANDLIST_SIZE:
+    return nil
+  {.cast(uncheckedAssign).}:
+    let cmd = cast[ptr MUBaseCommand](addr muCtx.commandList.items[muCtx.commandList.index])
+    cmd.kind = MUCommandType.Jump
+    cmd.size = sizeof(MUBaseCommand)
+    cmd.destination = dest
+    muCtx.commandList.index += cmd.size
+    return cmd
 
 proc muSetClip*(muCtx: var MUContext = muGlobalContext, rect: MURect) =
-  var cmd: MUBaseCommand
-  cmd.kind = MUCommandType.Clip
-  cmd.size = sizeof(MUBaseCommand)
-  cmd.clipRect = rect
-  muPushCommand(muCtx, cmd)
+  {.cast(uncheckedAssign).}:
+    var cmd: MUBaseCommand
+    cmd.kind = MUCommandType.Clip
+    cmd.size = sizeof(MUBaseCommand)
+    cmd.clipRect = rect
+    muPushCommand(muCtx, cmd)
 
 proc muDrawRect*(muCtx: var MUContext = muGlobalContext, rect: MURect, color: MUColor) =
   var cmd: MUBaseCommand
   let r = intersect(rect, muGetClipRect(muCtx))
   if r.w > 0 and r.h > 0:
-    cmd.kind = MUCommandType.Rect
-    cmd.size = sizeof(MUBaseCommand)
-    cmd.rectRect = r
-    cmd.rectColor = color
-    muPushCommand(muCtx, cmd)
+    {.cast(uncheckedAssign).}:
+      cmd.kind = MUCommandType.Rect
+      cmd.size = sizeof(MUBaseCommand)
+      cmd.rectRect = r
+      cmd.rectColor = color
+      muPushCommand(muCtx, cmd)
 
 proc muDrawBox*(muCtx: var MUContext = muGlobalContext, boxRect: MURect, color: MUColor) =
   muDrawRect(muCtx, rect(boxRect.x + 1, boxRect.y, boxRect.w - 2, 1), color)
@@ -526,11 +596,12 @@ proc muDrawIcon*(muCtx: var MUContext = muGlobalContext, id: int, rect: MURect, 
     return
   if clipped == ord(MUClip.Partial):
     muSetClip(muCtx, muGetClipRect(muCtx))
-  cmd.kind = MUCommandType.Icon
-  cmd.size = sizeof(MUBaseCommand)
-  cmd.iconId = id
-  cmd.iconRect = rect
-  cmd.iconColor = color
+  {.cast(uncheckedAssign).}:
+    cmd.kind = MUCommandType.Icon
+    cmd.size = sizeof(MUBaseCommand)
+    cmd.iconId = id
+    cmd.iconRect = rect
+    cmd.iconColor = color
   muPushCommand(muCtx, cmd)
   if clipped != 0:
     muSetClip(muCtx, UnclippedRect)
@@ -682,6 +753,8 @@ proc muUpdateControl*(muCtx: var MUContext = muGlobalContext, id: uint, rect: MU
       muSetFocus(muCtx, id)
     elif not mouseover:
       muCtx.hover = 0
+  elif mouseover and muCtx.mousePressed != 0:
+    muSetFocus(muCtx, id)
 
 proc drawFrame(muCtx: var MUContext, rect: MURect, colorid: int): void =
   muDrawRect(muCtx, rect, muCtx.style.colors[MUElementColor(colorid)])
@@ -705,7 +778,7 @@ proc muDrawControlText*(muCtx: var MUContext = muGlobalContext, str: string, rec
   let tw = muCtx.text_width(font, str, str.len)
   muPushClipRect(muCtx, rect)
   pos.y = rect.y + (rect.h - muCtx.text_height(font)) div 2
-  if (opt and (1 shl ord(MUWindowOption.AligneCenter))) != 0:
+  if (opt and (1 shl ord(MUWindowOption.AlignCenter))) != 0:
     pos.x = rect.x + (rect.w - tw) div 2
   elif (opt and (1 shl ord(MUWindowOption.AlignRight))) != 0:
     pos.x = rect.x + rect.w - tw - muCtx.style.padding
@@ -721,22 +794,36 @@ proc muText*(muCtx: var MUContext = muGlobalContext, text: string) =
   muLayoutBeginColumn(muCtx)
   muLayoutRow(muCtx, 1, @[-1], muCtx.text_height(font))
   while p < text.len:
+    let r = muLayoutNext(muCtx)
+    var w = 0
     var start = p
     var endPos = p
-    var w = 0
     while p < text.len and text[p] != '\n':
-      endPos = p
-      p += 1
-    let r = muLayoutNext(muCtx)
-    muDrawText(muCtx, font, text[start..endPos], vec2(r.x, r.y), color)
-    if p < text.len:
+      let wordStart = p
+      while p < text.len and text[p] != ' ' and text[p] != '\n':
+        p += 1
+      let word = text[wordStart ..< p]
+      w += muCtx.text_width(font, word, word.len)
+      if w > r.w and endPos != start:
+        break
+      if p < text.len and text[p] == ' ':
+        w += muCtx.text_width(font, " ", 1)
+        endPos = p
+        p += 1
+      else:
+        endPos = p
+    if endPos > start:
+      muDrawText(muCtx, font, text[start ..< endPos], vec2(r.x, r.y), color)
+    else:
+      muDrawText(muCtx, font, "", vec2(r.x, r.y), color)
+    if p < text.len and text[p] == '\n':
       p += 1
   muLayoutEndColumn(muCtx)
 
 proc muLabel*(muCtx: var MUContext = muGlobalContext, text: string) =
   muDrawControlText(muCtx, text, muLayoutNext(muCtx), ord(MUElementColor.ColorText), 0)
 
-proc muButton*(muCtx: var MUContext = muGlobalContext, label: string, icon: int = 0, opt: int = 0): int =
+proc muButton*(muCtx: var MUContext = muGlobalContext, label: string, icon: int = 0, opt: int = 0): bool =
   var id: uint
   if label.len > 0:
     id = muGetIdStr(muCtx, label)
@@ -745,7 +832,7 @@ proc muButton*(muCtx: var MUContext = muGlobalContext, label: string, icon: int 
   let r = muLayoutNext(muCtx)
   muUpdateControl(muCtx, id, r, opt)
   if muCtx.mousePressed == ord(MUMouse.Left) and muCtx.focus == id:
-    result = result or (1 shl ord(MUResult.Submit))
+    result = result or (1 shl ord(MUResult.Submit)) != 0
   muDrawControlFrame(muCtx, id, r, ord(MUElementColor.ColorButton), opt)
   if label.len > 0:
     muDrawControlText(muCtx, label, r, ord(MUElementColor.ColorText), opt)
@@ -753,7 +840,8 @@ proc muButton*(muCtx: var MUContext = muGlobalContext, label: string, icon: int 
     muDrawIcon(muCtx, icon, r, muCtx.style.colors[MUElementColor.ColorText])
 
 proc muCheckbox*(muCtx: var MUContext = muGlobalContext, label: string, state: var bool): int =
-  var id = muGetId(muCtx, cast[seq[byte]](@[byte(if state: 1 else: 0)]))
+  var statePtr = addr state
+  var id = muGetIdPtr(muCtx, addr statePtr, sizeof(statePtr))
   let r = muLayoutNext(muCtx)
   let box = rect(r.x, r.y, r.h, r.h)
   muUpdateControl(muCtx, id, r, 0)
@@ -767,7 +855,8 @@ proc muCheckbox*(muCtx: var MUContext = muGlobalContext, label: string, state: v
   muDrawControlText(muCtx, label, r2, ord(MUElementColor.ColorText), 0)
 
 proc muTextbox*(muCtx: var MUContext = muGlobalContext, buf: var string, opt: int = 0): int =
-  let id = muGetId(muCtx, cast[seq[byte]](buf))
+  var bufPtr = addr buf
+  let id = muGetIdPtr(muCtx, addr bufPtr, sizeof(bufPtr))
   let r = muLayoutNext(muCtx)
   muUpdateControl(muCtx, id, r, opt or (1 shl ord(MUWindowOption.HoldFocus)))
   
@@ -807,13 +896,16 @@ proc muTextbox*(muCtx: var MUContext = muGlobalContext, buf: var string, opt: in
 
 proc muSlider*(muCtx: var MUContext = muGlobalContext, value: var float, low, high: float, step: float = 0, opt: int = 0): int =
   var v = value
-  let id = muGetId(muCtx, cast[seq[byte]](@[byte(cast[int](addr value))]))
+  var valuePtr = addr value
+  let id = muGetIdPtr(muCtx, addr valuePtr, sizeof(valuePtr))
   let base = muLayoutNext(muCtx)
   
   muUpdateControl(muCtx, id, base, opt)
   
-  if muCtx.focus == id and (muCtx.mouseDown or muCtx.mousePressed) == ord(MUMouse.Left):
+  if muCtx.focus == id and bitor[int](muCtx.mouseDown, muCtx.mousePressed) == ord(MUMouse.Left):
     v = low + (muCtx.mousePos.x - base.x).float * (high - low) / base.w.float
+    if step != 0:
+      v = (round((v / step).float) * step)
   
   v = clamp(v, low, high)
   if value != v:
@@ -826,8 +918,10 @@ proc muSlider*(muCtx: var MUContext = muGlobalContext, value: var float, low, hi
   let x = int((v - low) * (base.w - w).float / (high - low))
   let thumb = rect(base.x + x, base.y, w, base.h)
   muDrawControlFrame(muCtx, id, thumb, ord(MUElementColor.ColorButton), opt)
+  let text = &"{v:.2f}"
+  muDrawControlText(muCtx, text, base, ord(MUElementColor.ColorText), opt)
 
-proc muHeader*(muCtx: var MUContext = muGlobalContext, label: string, opt: int = 0): bool =
+proc header(muCtx: var MUContext, label: string, isTreenode: bool, opt: int): int =
   let id = muGetIdStr(muCtx, label)
   let idx = muPoolGet(muCtx, muCtx.treeNodePool, id)
   var active = idx >= 0
@@ -835,31 +929,45 @@ proc muHeader*(muCtx: var MUContext = muGlobalContext, label: string, opt: int =
   muLayoutRow(muCtx, 1, @[-1], 0)
   let r = muLayoutNext(muCtx)
   muUpdateControl(muCtx, id, r, 0)
-  
+
   if muCtx.mousePressed == ord(MUMouse.Left) and muCtx.focus == id:
     active = not active
-  
+
   if idx >= 0:
-    if not active:
-      muCtx.treeNodePool[idx].lastUpdate = -1
+    if active:
+      muPoolUpdate(muCtx, muCtx.treeNodePool, idx)
+    else:
+      muCtx.treeNodePool[idx] = MUPoolItem()
   elif active:
     discard muPoolInit(muCtx, muCtx.treeNodePool, id)
-  
-  drawFrame(muCtx, r, ord(MUElementColor.ColorTitleBackground))
-  muDrawIcon(muCtx, if expanded: ord(MUIcon.Expanded) else: ord(MUIcon.Collapsed), 
+
+  if isTreenode:
+    if muCtx.hover == id:
+      drawFrame(muCtx, r, ord(MUElementColor.ColorButtonHover))
+  else:
+    muDrawControlFrame(muCtx, id, r, ord(MUElementColor.ColorButton), 0)
+
+  muDrawIcon(muCtx, if expanded: ord(MUIcon.Expanded) else: ord(MUIcon.Collapsed),
              rect(r.x, r.y, r.h, r.h), muCtx.style.colors[MUElementColor.ColorText])
   let r2 = rect(r.x + r.h - muCtx.style.padding, r.y, r.w - (r.h - muCtx.style.padding), r.h)
   muDrawControlText(muCtx, label, r2, ord(MUElementColor.ColorText), 0)
-  
-  return expanded
+
+  if expanded:
+    return (1 shl ord(MUResult.Active))
+  return 0
+
+proc muHeader*(muCtx: var MUContext = muGlobalContext, label: string, opt: int = 0): bool =
+  return header(muCtx, label, false, opt) != 0
 
 proc muBeginTreenode*(muCtx: var MUContext = muGlobalContext, label: string, opt: int = 0): bool =
-  result = muHeader(muCtx, label, opt)
+  result = header(muCtx, label, true, opt) != 0
   if result:
     let layout = getLayout(muCtx)
     if layout != nil:
       layout.indent += muCtx.style.indent
-    muPushIdStr(muCtx, label)
+    if muCtx.idStack.index < MICROUI_IDSTACK_SIZE:
+      muCtx.idStack.items[muCtx.idStack.index] = muCtx.lastId
+      muCtx.idStack.index += 1
 
 proc muEndTreenode*(muCtx: var MUContext = muGlobalContext) =
   let layout = getLayout(muCtx)
@@ -874,6 +982,7 @@ proc beginRootContainer(muCtx: var MUContext, cnt: ptr MUContainer) =
   if muCtx.rootList.index < MICROUI_ROOTLIST_SIZE:
     muCtx.rootList.items[muCtx.rootList.index] = cnt
     muCtx.rootList.index += 1
+  cnt.head = pushJump(muCtx, nil)
   if overlaps(cnt.rect, muCtx.mousePos):
     if muCtx.nextHoverRoot == nil or cnt.zIndex > muCtx.nextHoverRoot.zIndex:
       muCtx.nextHoverRoot = cnt
@@ -881,6 +990,11 @@ proc beginRootContainer(muCtx: var MUContext, cnt: ptr MUContainer) =
   muCtx.clipStack.index += 1
 
 proc endRootContainer(muCtx: var MUContext) =
+  let cnt = muGetCurrentContainer(muCtx)
+  if cnt != nil:
+    cnt.tail = pushJump(muCtx, nil)
+    if cnt.head != nil:
+      cnt.head.destination = cast[pointer](addr muCtx.commandList.items[muCtx.commandList.index])
   muPopClipRect(muCtx)
   popContainer(muCtx)
 
@@ -896,6 +1010,44 @@ proc pushContainerBody(muCtx: var MUContext, cnt: ptr MUContainer, body: MURect,
       bodyRect.w -= sz
     if cs.x > cnt.body.w:
       bodyRect.h -= sz
+    let maxScrollY = cs.y - bodyRect.h
+    if maxScrollY > 0 and bodyRect.h > 0:
+      var base = bodyRect
+      base.x = bodyRect.x + bodyRect.w
+      base.w = muCtx.style.scrollbarSize
+      let id = muGetIdStr(muCtx, "!scrollbary")
+      muUpdateControl(muCtx, id, base, 0)
+      if muCtx.focus == id and muCtx.mouseDown == ord(MUMouse.Left):
+        cnt.scroll.y += muCtx.mouseDelta.y * cs.y div base.h
+      cnt.scroll.y = clamp(cnt.scroll.y, 0, maxScrollY)
+      drawFrame(muCtx, base, ord(MUElementColor.ColorScrollBase))
+      var thumb = base
+      thumb.h = max(muCtx.style.thumbSize, base.h * bodyRect.h div cs.y)
+      thumb.y += cnt.scroll.y * (base.h - thumb.h) div maxScrollY
+      drawFrame(muCtx, thumb, ord(MUElementColor.ColorScrollThumb))
+      if muMouseOver(muCtx, bodyRect):
+        muCtx.scrollTarget = cnt
+    else:
+      cnt.scroll.y = 0
+    let maxScrollX = cs.x - bodyRect.w
+    if maxScrollX > 0 and bodyRect.w > 0:
+      var base = bodyRect
+      base.y = bodyRect.y + bodyRect.h
+      base.h = muCtx.style.scrollbarSize
+      let id = muGetIdStr(muCtx, "!scrollbarx")
+      muUpdateControl(muCtx, id, base, 0)
+      if muCtx.focus == id and muCtx.mouseDown == ord(MUMouse.Left):
+        cnt.scroll.x += muCtx.mouseDelta.x * cs.x div base.w
+      cnt.scroll.x = clamp(cnt.scroll.x, 0, maxScrollX)
+      drawFrame(muCtx, base, ord(MUElementColor.ColorScrollBase))
+      var thumb = base
+      thumb.w = max(muCtx.style.thumbSize, base.w * bodyRect.w div cs.x)
+      thumb.x += cnt.scroll.x * (base.w - thumb.w) div maxScrollX
+      drawFrame(muCtx, thumb, ord(MUElementColor.ColorScrollThumb))
+      if muMouseOver(muCtx, bodyRect):
+        muCtx.scrollTarget = cnt
+    else:
+      cnt.scroll.x = 0
     muPopClipRect(muCtx)
   pushLayout(muCtx, expand(bodyRect, -muCtx.style.padding), cnt.scroll)
   cnt.body = bodyRect
@@ -915,15 +1067,47 @@ proc muBeginWindow*(muCtx: var MUContext = muGlobalContext, title: string, rect:
   
   if (opt and (1 shl ord(MUWindowOption.NoFrame))) == 0:
     drawFrame(muCtx, cnt.rect, ord(MUElementColor.ColorWindowBackground))
-  
+
   if (opt and (1 shl ord(MUWindowOption.NoTitle))) == 0:
-    let titleRect = rect(cnt.rect.x, cnt.rect.y, cnt.rect.w, muCtx.style.titleHeight)
+    var titleRect = rect(cnt.rect.x, cnt.rect.y, cnt.rect.w, muCtx.style.titleHeight)
     drawFrame(muCtx, titleRect, ord(MUElementColor.ColorTitleBackground))
+    let titleId = muGetIdStr(muCtx, "!title")
+    muUpdateControl(muCtx, titleId, titleRect, opt)
     muDrawControlText(muCtx, title, titleRect, ord(MUElementColor.ColorTitleText), 0)
-    bodyRect.y += muCtx.style.titleHeight
-    bodyRect.h -= muCtx.style.titleHeight
-  
+    if titleId == muCtx.focus and muCtx.mouseDown == ord(MUMouse.Left):
+      cnt.rect.x += muCtx.mouseDelta.x
+      cnt.rect.y += muCtx.mouseDelta.y
+    bodyRect.y += titleRect.h
+    bodyRect.h -= titleRect.h
+    if (opt and (1 shl ord(MUWindowOption.NoClose))) == 0:
+      let closeId = muGetIdStr(muCtx, "!close")
+      let closeRect = rect(titleRect.x + titleRect.w - titleRect.h, titleRect.y, titleRect.h, titleRect.h)
+      muDrawIcon(muCtx, ord(MUIcon.Close), closeRect, muCtx.style.colors[MUElementColor.ColorTitleText])
+      muUpdateControl(muCtx, closeId, closeRect, opt)
+      if muCtx.mousePressed == ord(MUMouse.Left) and closeId == muCtx.focus:
+        cnt.open = 0
+      titleRect.w -= closeRect.w
+
   pushContainerBody(muCtx, cnt, bodyRect, opt)
+
+  if (opt and (1 shl ord(MUWindowOption.NoResive))) == 0:
+    let sz = muCtx.style.titleHeight
+    let resizeId = muGetIdStr(muCtx, "!resize")
+    let resizeRect = rect(rect.x + rect.w - sz, rect.y + rect.h - sz, sz, sz)
+    muUpdateControl(muCtx, resizeId, resizeRect, opt)
+    if resizeId == muCtx.focus and muCtx.mouseDown == ord(MUMouse.Left):
+      cnt.rect.w = max(96, cnt.rect.w + muCtx.mouseDelta.x)
+      cnt.rect.h = max(64, cnt.rect.h + muCtx.mouseDelta.y)
+
+  if (opt and (1 shl ord(MUWindowOption.AutoSize))) != 0:
+    let layout = getLayout(muCtx)
+    if layout != nil:
+      cnt.rect.w = cnt.contentSize.x + (cnt.rect.w - layout.body.w)
+      cnt.rect.h = cnt.contentSize.y + (cnt.rect.h - layout.body.h)
+
+  if (opt and (1 shl ord(MUWindowOption.Popup))) != 0 and muCtx.mousePressed != 0 and muCtx.hoverRoot != cnt:
+    cnt.open = 0
+
   muPushClipRect(muCtx, cnt.body)
   return true
 
@@ -997,3 +1181,76 @@ proc muEnd*(muCtx: var MUContext = muGlobalContext) =
   muCtx.mousePressed = 0
   muCtx.scrollDelta = vec2(0, 0)
   muCtx.lastMousePos = muCtx.mousePos
+
+  if muCtx.rootList.index > 1:
+    var i = 1
+    while i < muCtx.rootList.index:
+      let key = muCtx.rootList.items[i]
+      var j = i
+      while j > 0 and muCtx.rootList.items[j - 1].zIndex > key.zIndex:
+        muCtx.rootList.items[j] = muCtx.rootList.items[j - 1]
+        j -= 1
+      muCtx.rootList.items[j] = key
+      i += 1
+
+  let n = muCtx.rootList.index
+  if n > 0:
+    let first = muCtx.rootList.items[0]
+    if first != nil and first.head != nil:
+      let cmd = cast[ptr MUBaseCommand](addr muCtx.commandList.items[0])
+      cmd.destination = cast[pointer](cast[int](first.head) + first.head.size)
+  var i = 0
+  while i < n:
+    let cnt = muCtx.rootList.items[i]
+    if cnt != nil and cnt.tail != nil:
+      if i + 1 < n and muCtx.rootList.items[i + 1] != nil:
+        let nextHead = muCtx.rootList.items[i + 1].head
+        if nextHead != nil:
+          cnt.tail.destination = cast[pointer](cast[int](nextHead) + nextHead.size)
+      else:
+        cnt.tail.destination = cast[pointer](addr muCtx.commandList.items[muCtx.commandList.index])
+    i += 1
+
+## Templates
+
+template mu*(muCtx: var MUContext = muGlobalContext, body: untyped) =
+  muBegin(muCtx)
+  try:
+    body
+  finally:
+    muEnd(muCtx)
+
+template muWindow*(muCtx: var MUContext = muGlobalContext, title: string, rect: MURect, body: untyped) =
+  if muBeginWindow(muCtx, title, rect, 0):
+    try:
+      body
+    finally:
+      muEndWindow(muCtx)
+
+template muPanel*(muCtx: var MUContext = muGlobalContext, name: string, body: untyped) =
+  muBeginPanel(muCtx, name, 0)
+  try:
+    body
+  finally:
+    muEndPanel(muCtx)
+
+template muPopup*(muCtx: var MUContext = muGlobalContext, name: string, body: untyped) =
+  if muBeginPopup(muCtx, name):
+    try:
+      body
+    finally:
+      muEndPopup(muCtx)
+
+template muTreenode*(muCtx: var MUContext = muGlobalContext, label: string, body: untyped) =
+  if muBeginTreenode(muCtx, label, 0):
+    try:
+      body
+    finally:
+      muEndTreenode(muCtx)
+
+template muLayoutColumn*(muCtx: var MUContext = muGlobalContext, body: untyped) =
+  muLayoutBeginColumn(muCtx)
+  try:
+    body
+  finally:
+    muLayoutEndColumn(muCtx)
