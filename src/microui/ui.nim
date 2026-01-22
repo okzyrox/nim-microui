@@ -128,7 +128,7 @@ type MUPoolItem* = object
 
 ##/ Structs-Commands
 
-type MUBaseCommand* = object
+type MUBaseCommand* = object 
   id*, size*: int
   case kind*: MUCommandType
   of MUCommandType.Jump:
@@ -504,12 +504,13 @@ proc muDrawText*(muCtx: var MUContext = muGlobalContext, font: MUFont, str: stri
     muSetClip(muCtx, muGetClipRect(muCtx))
   let size = sizeof(MUBaseCommand) + str.len
   if muCtx.commandList.index + size <= MICROUI_COMMANDLIST_SIZE:
-    let cmd = cast[ptr MUBaseCommand](addr muCtx.commandList.items[muCtx.commandList.index])
-    cmd.kind = MUCommandType.Text
-    cmd.size = size
-    cmd.textPos = pos
-    cmd.textColor = color
-    cmd.textFont = font
+    {.cast(uncheckedAssign).}:
+      let cmd = cast[ptr MUBaseCommand](addr muCtx.commandList.items[muCtx.commandList.index])
+      cmd.kind = MUCommandType.Text
+      cmd.size = size
+      cmd.textPos = pos
+      cmd.textColor = color
+      cmd.textFont = font
     let textDest = cast[ptr UncheckedArray[char]](addr cmd.textStr)
     if str.len > 0:
       copyMem(textDest, unsafeAddr str[0], str.len)

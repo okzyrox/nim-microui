@@ -9,12 +9,25 @@ var
   logbufUpdated = false
   bg = [90.0, 95.0, 100.0]
   lastMouseDown = false
+  lastMousePos = vec2(0, 0)
 
 proc writeLog(text: string) =
   if logbuf.len > 0:
     logbuf.add("\n")
   logbuf.add(text)
   logbufUpdated = true
+
+proc cursor_pos_cb(window: Window, pos: tuple[x,y: float64]) =
+  let v = vec2(pos.x.int, pos.y.int)
+  muInputMouseMove(muCtx, v.x, v.y)
+  lastMousePos = v
+
+proc mouse_button_cb(window: Window, b: MouseButton, pressed: bool, mods: set[ModifierKey]) =
+  if b == mbLeft:
+    if pressed:
+      muInputMouseDown(muCtx, lastMousePos.x, lastMousePos. y, ord(MUMouse.Left))
+    else:
+      muInputMouseUp(muCtx, lastMousePos.x, lastMousePos.y, ord(MUMouse.Left))
 
 proc textWidth(font: MUFont, text: string, len: int): int =
   getTextWidth(text, len)
@@ -118,6 +131,9 @@ proc main() =
   cfg.version = glv21
   
   let window = newWindow(cfg)
+
+  window.cursorPositionCb = cursor_pos_cb
+  window.mouseButtonCb = mouse_button_cb
   
   if not gladLoadGL(getProcAddress):
     quit("Error initialising OpenGL")
