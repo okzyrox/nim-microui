@@ -27,14 +27,11 @@ proc initRenderer*() =
   glEnableClientState(GL_TEXTURE_COORD_ARRAY)
   glEnableClientState(GL_COLOR_ARRAY)
   
-  for i in 0..<(ATLAS_WIDTH * ATLAS_HEIGHT):
-    atlasTexture[i] = 255
-  
   var id: GLuint
   glGenTextures(1, addr id)
   glBindTexture(GL_TEXTURE_2D, id)
   glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA.GLint, ATLAS_WIDTH, ATLAS_HEIGHT, 0,
-    GL_ALPHA, GL_UNSIGNED_BYTE, addr atlasTexture[0])
+    GL_ALPHA, GL_UNSIGNED_BYTE, addr atlas_texture[0])
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST.GLint)
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST.GLint)
 
@@ -121,8 +118,7 @@ proc pushQuad(dst, src: MURect, color: MUColor) =
   indexBuf[indexIdx + 5] = (elementIdx + 1).uint32
 
 proc drawRect*(r: MURect, color: MUColor) =
-  let whiteRect = rect(0, 0, 1, 1)
-  pushQuad(r, whiteRect, color)
+  pushQuad(r, atlas[AtlasFont.White.int], color)
 
 proc drawText*(text: string, pos: MUVec2, color: MUColor) =
   var dst = rect(pos.x, pos.y, 0, 0)
@@ -130,28 +126,30 @@ proc drawText*(text: string, pos: MUVec2, color: MUColor) =
     if (ord(c) and 0xc0) == 0x80:
       continue
     let chr = min(ord(c), 127)
-    let src = rect(chr * 8, 0, 8, 16)
+    let src = atlas[AtlasFont.Font.int + chr]
     dst.w = src.w
     dst.h = src.h
     pushQuad(dst, src, color)
     dst.x += dst.w
 
 proc drawIcon*(id: int, r: MURect, color: MUColor) =
-  let src = rect(id * 16, 16, 16, 16)
+  let src = atlas[id]
   let x = r.x + (r.w - src.w) div 2
   let y = r.y + (r.h - src.h) div 2
   pushQuad(rect(x, y, src.w, src.h), src, color)
 
 proc getTextWidth*(text: string, len: int): int =
   result = 0
-  var remaining = if len < 0: text.len else: len
+  var remaining = len
   for c in text:
-    if remaining <= 0:
+    if c == '\0' or (len >= 0 and remaining <= 0):
       break
     if (ord(c) and 0xc0) == 0x80:
       continue
-    result += 8
-    remaining -= 1
+    let chr = min(ord(c), 127)
+    result += atlas[AtlasFont.Font.int + chr].w
+    if len >= 0:
+      remaining -= 1
 
 proc getTextHeight*(): int =
   return 18
@@ -162,6 +160,8 @@ proc setClipRect*(r: MURect) =
 
 proc clear*(clr: MUColor) =
   flush()
+  glViewport(0, 0, width.GLsizei, height.GLsizei)
+  glScissor(0, 0, width.GLsizei, height.GLsizei)
   glClearColor(clr.r.float / 255.0, clr.g.float / 255.0, clr.b.float / 255.0, clr.a.float / 255.0)
   glClear(GL_COLOR_BUFFER_BIT)
 

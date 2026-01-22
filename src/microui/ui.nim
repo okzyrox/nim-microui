@@ -304,7 +304,7 @@ proc intersect*(r1, r2: MURect): MURect =
 
 proc overlaps*(r: MURect, v: MUVec2): bool =
   result = (
-    v.x >= r.x and v.x < r.x + r.w and v.y >= r.y and r.y < r.y + r.h
+    v.x >= r.x and v.x < r.x + r.w and v.y >= r.y and v.y < r.y + r.h
   )
 
 proc color*(r, g, b, a: byte): MUColor =
@@ -496,19 +496,25 @@ proc muDrawBox*(muCtx: var MUContext = muGlobalContext, boxRect: MURect, color: 
   muDrawRect(muCtx, rect(boxRect.x + boxRect.w - 1, boxRect.y, 1, boxRect.h), color)
 
 proc muDrawText*(muCtx: var MUContext = muGlobalContext, font: MUFont, str: string, pos: MUVec2, color: MUColor) =
-  var cmd: MUBaseCommand
   let r = rect(pos.x, pos.y, muCtx.text_width(font, str, str.len), muCtx.text_height(font))
   let clipped = muCheckClip(muCtx, r)
   if clipped == ord(MUClip.All):
     return
   if clipped == ord(MUClip.Partial):
     muSetClip(muCtx, muGetClipRect(muCtx))
-  cmd.kind = MUCommandType.Text
-  cmd.size = sizeof(MUBaseCommand) + str.len
-  cmd.textPos = pos
-  cmd.textColor = color
-  cmd.textFont = font
-  muPushCommand(muCtx, cmd)
+  let size = sizeof(MUBaseCommand) + str.len
+  if muCtx.commandList.index + size <= MICROUI_COMMANDLIST_SIZE:
+    let cmd = cast[ptr MUBaseCommand](addr muCtx.commandList.items[muCtx.commandList.index])
+    cmd.kind = MUCommandType.Text
+    cmd.size = size
+    cmd.textPos = pos
+    cmd.textColor = color
+    cmd.textFont = font
+    let textDest = cast[ptr UncheckedArray[char]](addr cmd.textStr)
+    if str.len > 0:
+      copyMem(textDest, unsafeAddr str[0], str.len)
+    textDest[str.len] = '\0'
+    muCtx.commandList.index += size
   if clipped != 0:
     muSetClip(muCtx, UnclippedRect)
 
@@ -965,6 +971,7 @@ proc muBegin*(muCtx: var MUContext = muGlobalContext) =
   muCtx.rootList.index = 0
   muCtx.scrollTarget = nil
   muCtx.hoverRoot = muCtx.nextHoverRoot
+  muCtx.nextHoverRoot = nil
   muCtx.mouseDelta.x = muCtx.mousePos.x - muCtx.lastMousePos.x
   muCtx.mouseDelta.y = muCtx.mousePos.y - muCtx.lastMousePos.y
   muCtx.frame += 1

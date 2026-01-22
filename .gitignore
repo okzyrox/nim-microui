@@ -5,3 +5,4 @@ microui/*
 *.c
 *.h
 *.cfg
+*.inl

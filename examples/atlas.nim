@@ -3,11 +3,10 @@ type AtlasFont = enum
   Font
 
 const
-  ATLAS_WIDTH = 557#128
-  ATLAS_HEIGHT = 19#128
+  ATLAS_WIDTH = 128
+  ATLAS_HEIGHT = 128
 
-
-var atlas_texture = @[
+var atlas_texture: seq[uint8] = @[
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -892,13 +891,12 @@ var atlas_texture = @[
   0x00, 0x00, 0xba, 0xf7, 0x0e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 ]
 
-var atlas = newSeq[MURect](ATLAS_HEIGHT * ATLAS_WIDTH)
-
+var atlas = newSeq[MURect](AtlasFont.Font.int + 128)
 atlas[MUIcon.Close.int] = rect(88, 68, 16, 16)
 atlas[MUIcon.Check.int] = rect(0, 0, 18, 18)
 atlas[MUIcon.Expanded.int] = rect(118, 68, 7, 5)
 atlas[MUIcon.Collapsed.int] = rect(113, 68, 5, 7)
-atlas[AtlasFont.White.int] = rect(128, 68, 3, 3)
+atlas[AtlasFont.White.int] = rect(125, 68, 3, 3)
 atlas[AtlasFont.Font.int+32] = rect(84, 68, 2, 17)
 atlas[AtlasFont.Font.int+33] = rect(39, 68, 3, 17)
 atlas[AtlasFont.Font.int+34] = rect(114, 51, 5, 17)
