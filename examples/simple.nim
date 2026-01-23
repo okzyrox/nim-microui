@@ -2,8 +2,15 @@ import std/[strformat, unicode]
 
 import glfw
 
-import ../src/microui/ui
+import ../src/microui
 import ../src/microui/renderer/renderer_gl
+
+when defined(extras):
+  import ../src/microui/extras
+
+const
+  WINDOW_WIDTH = 1050
+  WINDOW_HEIGHT = 750
 
 var
   muCtx: ref MUContext
@@ -16,6 +23,8 @@ var
   bg = [90.0, 95.0, 100.0]
   lastMousePos = vec2(0, 0)
   checks = [true, false, true]
+
+  aboutWindowOpen = false
 
 proc writeLog(text: string) =
   if logbuf.len > 0:
@@ -33,6 +42,8 @@ proc uint8Slider(value: var byte): int =
   value = tmp.byte
   muPopId(muCtx)
   return res
+
+## Original Demo windows/parts
 
 proc testWindow() =
   muWindow(muCtx, "Demo Window", rect(40, 40, 300, 450)):
@@ -155,7 +166,10 @@ proc styleWindow() =
     "basehover:",
     "basefocus:",
     "scrollbase:",
-    "scrollthumb:"
+    "scrollthumb:",
+    "menubarbg:",
+    "seperator:",
+    "textlink:"
   ]
 
   muWindow(muCtx, "Style Editor", rect(350, 250, 300, 240)):
@@ -172,14 +186,66 @@ proc styleWindow() =
       muDrawRect(muCtx, muLayoutNext(muCtx), muCtx.style.colors[idx])
       i += 1
 
+proc menuBar() = 
+  ## Extras showcase
+
+  ## Optionally, no muCtx can be provided if you want to use the global context
+  ## Although if you want to use multiple contexts (for whatever reason), dont do this 
+  ## as it would only use the latest initialised context
+
+  ## Menu Bars
+  ## When used under a Window (MUWindow), the position and width fields do not have to be set
+  ## When used outside of a window, they can be set (currently set to the top of the window)
+  ## Acts like a menu bar or toolbar
+  when defined(extras):
+    muMenuBar(0, 0, WINDOW_WIDTH):
+      ## A tab in the menu bar
+      ## Similar to a Treenode, but indicated by a button and hides other options when clicked
+      muMenuBarTab("File"):
+        muTextSeparator("Manage")
+        if muButton("New"): 
+          writeLog("File/New")
+        if muButton("Open"): 
+          writeLog("File/Open")
+        if muButton("Save"): 
+          writeLog("File/Save")
+      muMenuBarTab("Edit"):
+        if muButton("Cut"): 
+          writeLog("Edit/Cut")
+        muSeparator()
+        if muButton("Copy"): 
+          writeLog("Edit/Copy")
+      
+      muMenuBarTab("Help"):
+        if muButton("About"): 
+          aboutWindowOpen = not aboutWindowOpen
+    
+    ## Unlike the original, a window can be bound to a variable bool
+    ## Toggling it will toggle the window being "open" or drawn
+    muWindow("About", rect(200, 150, 300, 200), aboutWindowOpen):
+      muLayoutRow(1, @[-1], 0)
+      muText("Nim microui Example\n" &
+        "This is a simple example of microui in Nim.\n")
+      
+      muTextLink("Source Code for this Example", "https://github.com/okzyrox/nim-microui/blob/main/examples/simple.nim")
+      muTextLink("nim-microui GitHub", "https://github.com/okzyrox/nim-microui")
+      muSeparator()
+      muTextLink("microui GitHub", "https://github.com/rxi/microui")
+      muSeparator()
+      muText("microui was developed by rxi")
+      muText("nim-microui is developed by okzyrox")
+      muText("License: MIT")
+
 proc processFrame() =
-  mu(muCtx):
+  mu:
+    when defined(extras):
+      menuBar()
+    
     styleWindow()
     testWindow()
     logWindow()
 
-
-# glfw overhead
+# GLFW overhead
 proc cursor_pos_cb(window: Window, pos: tuple[x,y: float64]) =
   let v = vec2(pos.x.int, pos.y.int)
   muInputMouseMove(muCtx, v.x, v.y)
@@ -208,6 +274,8 @@ proc key_cb(window: Window, key: Key, scanCode: int32, action: KeyAction, mods: 
     mapped = ord(MUControlKey.Backspace)
   of keyEnter:
     mapped = ord(MUControlKey.Return)
+  of keyEscape:
+    window.shouldClose = true
   else:
     discard
   if mapped != 0:
@@ -225,7 +293,7 @@ proc main() =
   glfw.initialize()
   
   var cfg = DefaultOpenglWindowConfig
-  cfg.size = (w: 1050, h: 750)
+  cfg.size = (w: WINDOW_WIDTH, h: WINDOW_HEIGHT)
   cfg.title = "Nim microui Example"
   cfg.resizable = false
   cfg.version = glv21

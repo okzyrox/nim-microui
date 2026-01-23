@@ -1,3 +1,6 @@
+## microui
+## License: MIT
+
 import microui/[
   ui
 ]

@@ -1,3 +1,6 @@
+## microui - OpenGL/GLFW renderer
+## License: MIT
+
 import ../ui
 import glad/gl
 import glfw

@@ -9,7 +9,8 @@
 
 - [ ] fix backspace/del on example
 
-- [ ] add template that only needs to pass `MUContext` ref once
+- [x] ~~add template that only needs to pass `MUContext` ref once~~
+    - achieved via global context
     
     i.e.:
     ```nim

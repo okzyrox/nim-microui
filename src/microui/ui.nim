@@ -1,4 +1,5 @@
-## microui
+## microui - UI
+## License: MIT
 
 import std/[
   bitops,
@@ -52,7 +53,19 @@ type MUElementColor* = enum
   ColorBaseFocus
   ColorScrollBase
   ColorScrollThumb
+  ## Extras:
+  ColorMenuBar
+  ColorSeparator
+  ColorTextLink
+  ## End
   ColorMax
+
+type MUMouseState* = enum ## for renderers/windows to update
+  Default = 0
+  Select = 1
+  DragHorizontal = 2
+  DragVertical = 3
+  TextSelect = 4
 
 type MUIcon* = enum
   Close = 1
@@ -217,7 +230,11 @@ const
       MUColor(r: 35, g: 35, b: 35, a: 255), # ColorBaseHover
       MUColor(r: 40, g: 40, b: 40, a: 255), # ColorBaseFocus
       MUColor(r: 43, g: 43, b: 43, a: 255), # ColorScrollBase
-      MUColor(r: 30, g: 30, b: 30, a: 255)  # ColorScrollThumb
+      MUColor(r: 30, g: 30, b: 30, a: 255), # ColorScrollThumb
+      # Extras:
+      MUColor(r: 35, g: 35, b: 35, a: 255),  # ColorMenuBar
+      MUColor(r: 100, g: 100, b: 100, a: 255),  # ColorSeparator
+      MUColor(r: 57, g: 113, b: 219, a: 255)  # ColorTextLink
     ]
   )
 
@@ -261,7 +278,7 @@ type MUContext* = object
   treeNodePool*: array[MICROUI_TREENODEPOOL_SIZE, MUPoolItem]
 
   ## input state
-  mousePos: MUVec2
+  mousePos*: MUVec2
   lastMousePos: MUVec2
   mouseDelta: MUVec2
   scrollDelta: MUVec2
@@ -272,7 +289,7 @@ type MUContext* = object
   keyPressed*: int
   inputText*: array[32, char]
 
-var muGlobalContext*: MUContext
+var muGlobalContext*: ref MUContext
 ##/ Utility
 
 proc vec2*(x, y: int): MUVec2 =
@@ -417,7 +434,7 @@ proc muBringToFront*(muCtx: var ref MUContext, cnt: ptr MUContainer) =
   muCtx.lastZIndex += 1
   cnt.zIndex = muCtx.lastZIndex
 
-proc getContainer(muCtx: var ref MUContext, id: uint, opt: int): ptr MUContainer =
+proc getContainer*(muCtx: var ref MUContext, id: uint, opt: int): ptr MUContainer =
   var idx = muPoolGet(muCtx, muCtx.containerPool, id)
   if idx >= 0:
     if muCtx.containers[idx].open != 0 or (opt and (1 shl ord(MUWindowOption.Closed))) == 0:
@@ -523,13 +540,15 @@ proc muNextCommand*(muCtx: var ref MUContext, cmd: var ptr MUBaseCommand): bool 
   else:
     cmd = cast[ptr MUBaseCommand](addr muCtx.commandList.items[0])
   while cast[int](cmd) < endPtr:
+    if cmd == nil:
+      return false
     if cmd.kind != MUCommandType.Jump:
       return true
     cmd = cast[ptr MUBaseCommand](cmd.destination)
   cmd = nil
   return false
 
-proc pushJump(muCtx: var ref MUContext, dest: pointer): ptr MUBaseCommand =
+proc pushJump*(muCtx: var ref MUContext, dest: pointer): ptr MUBaseCommand =
   if muCtx.commandList.index + sizeof(MUBaseCommand) > MICROUI_COMMANDLIST_SIZE:
     return nil
   {.cast(uncheckedAssign).}:
@@ -606,7 +625,7 @@ proc muDrawIcon*(muCtx: var ref MUContext, id: int, rect: MURect, color: MUColor
   if clipped != 0:
     muSetClip(muCtx, UnclippedRect)
   
-proc getLayout(muCtx: var ref MUContext): ptr MULayout =
+proc getLayout*(muCtx: var ref MUContext): ptr MULayout =
   if muCtx.layoutStack.index > 0:
     return addr muCtx.layoutStack.items[muCtx.layoutStack.index - 1]
 
@@ -622,7 +641,7 @@ proc muLayoutRow*(muCtx: var ref MUContext, items: int, widths: openArray[int], 
     layout.size.y = height
     layout.itemIndex = 0
 
-proc pushLayout(muCtx: var ref MUContext, body: MURect, scroll: MUVec2) =
+proc pushLayout*(muCtx: var ref MUContext, body: MURect, scroll: MUVec2) =
   if muCtx.layoutStack.index < MICROUI_LAYOUTSTACK_SIZE:
     var layout = MULayout()
     layout.body = rect(body.x - scroll.x, body.y - scroll.y, body.w, body.h)
@@ -1146,10 +1165,15 @@ proc muEndPanel*(muCtx: var ref MUContext) =
   popContainer(muCtx)
 
 proc muInit*(muCtx: var ref MUContext) =
+  if muCtx != nil:
+    return
+
   muCtx = new MUContext
   muCtx.style = DefaultStyle
   muCtx.styleRef = addr muCtx.style
   muCtx.draw_frame = drawFrame
+
+  muGlobalContext = muCtx
 
 proc muBegin*(muCtx: var ref MUContext) =
   muCtx.commandList.index = 0
@@ -1254,3 +1278,183 @@ template muLayoutColumn*(muCtx: var ref MUContext, body: untyped) =
     body
   finally:
     muLayoutEndColumn(muCtx)
+
+# Global context
+# note: we have to do this down here as `muCtx: var ref MUContext = muGlobalContext` fails type matching
+
+## Global funcs
+
+proc muInputMouseDown*(btn: MUMouse) =
+  if muGlobalContext == nil:
+    raise newException(ValueError, "microui is not initialised!")
+  muInputMouseDown(muGlobalContext, btn)
+
+proc muInputMouseUp*(btn: MUMouse) =
+  if muGlobalContext == nil:
+    raise newException(ValueError, "microui is not initialised!")
+  
+  muInputMouseUp(muGlobalContext, btn)
+
+proc muInputMouseMove*(x, y: int) =
+  if muGlobalContext == nil:
+    raise newException(ValueError, "microui is not initialised!")
+  
+  muInputMouseMove(muGlobalContext, x, y)
+
+proc muInputScroll*(dx, dy: int) =
+  if muGlobalContext == nil:
+    raise newException(ValueError, "microui is not initialised!")
+  
+  muInputScroll(muGlobalContext, dx, dy)
+
+proc muInputKeyDown*(key: int) =
+  if muGlobalContext == nil:
+    raise newException(ValueError, "microui is not initialised!")
+  
+  muInputKeyDown(muGlobalContext, key)
+
+proc muInputKeyUp*(key: int) =
+  if muGlobalContext == nil:
+    raise newException(ValueError, "microui is not initialised!")
+  
+  muInputKeyUp(muGlobalContext, key)
+
+proc muInputText*(text: string) =
+  if muGlobalContext == nil:
+    raise newException(ValueError, "microui is not initialised!")
+    
+  muInputText(muGlobalContext, text)
+
+proc muLayoutRow*(cols: int, widths: openArray[int], height: int) =
+  if muGlobalContext == nil:
+    raise newException(ValueError, "microui is not initialised!")
+  
+  muLayoutRow(muGlobalContext, cols, widths, height)
+
+proc muText*(text: string) =
+  if muGlobalContext == nil:
+    raise newException(ValueError, "microui is not initialised!")
+  muText(muGlobalContext, text)
+
+proc muLabel*(text: string) =
+  if muGlobalContext == nil:
+    raise newException(ValueError, "microui is not initialised!")
+  muLabel(muGlobalContext, text)
+
+proc muButton*(label: string, icon: int = 0, opt: int = 0): bool =
+  if muGlobalContext == nil:
+    raise newException(ValueError, "microui is not initialised!")
+  return muButton(muGlobalContext, label, icon, opt)
+
+proc muCheckbox*(label: string, state: var bool): int =
+  if muGlobalContext == nil:
+    raise newException(ValueError, "microui is not initialised!")
+  return muCheckbox(muGlobalContext, label, state)
+
+proc muTextbox*(buf: var string, opt: int = 0): int =
+  if muGlobalContext == nil:
+    raise newException(ValueError, "microui is not initialised!")
+  return muTextbox(muGlobalContext, buf, opt)
+
+proc muSlider*(value: var float, low, high: float, step: float = 0, opt: int = 0): int =
+  if muGlobalContext == nil:
+    raise newException(ValueError, "microui is not initialised!")
+  return muSlider(muGlobalContext, value, low, high, step, opt)
+  
+proc muHeader*(label: string, opt: int = 0): bool =
+  if muGlobalContext == nil:
+    raise newException(ValueError, "microui is not initialised!")
+  return muHeader(muGlobalContext, label, opt)
+
+proc muBeginWindow*(title: string, rect: MURect, opt: int = 0): bool =
+  if muGlobalContext == nil:
+    raise newException(ValueError, "microui is not initialised!")
+  return muBeginWindow(muGlobalContext, title, rect, opt)
+
+proc muEndWindow*() =
+  if muGlobalContext == nil:
+    raise newException(ValueError, "microui is not initialised!")
+  muEndWindow(muGlobalContext)
+
+proc muOpenPopup*(name: string) =
+  if muGlobalContext == nil:
+    raise newException(ValueError, "microui is not initialised!")
+  muOpenPopup(muGlobalContext, name)
+
+proc muBeginPopup*(name: string): bool =
+  if muGlobalContext == nil:
+    raise newException(ValueError, "microui is not initialised!")
+  
+  return muBeginPopup(muGlobalContext, name)
+
+proc muEndPopup*() =
+  if muGlobalContext == nil:
+    raise newException(ValueError, "microui is not initialised!")
+  
+  muEndPopup(muGlobalContext)
+
+proc muBeginPanel*(name: string, opt: int = 0) =
+  if muGlobalContext == nil:
+    raise newException(ValueError, "microui is not initialised!")
+  
+  muBeginPanel(muGlobalContext, name, opt)
+
+proc muEndPanel*() =
+  if muGlobalContext == nil:
+    raise newException(ValueError, "microui is not initialised!")
+  
+  muEndPanel(muGlobalContext)
+
+proc muBeginTreenode*(label: string, opt: int = 0): bool =
+  if muGlobalContext == nil:
+    raise newException(ValueError, "microui is not initialised!")
+  
+  return muBeginTreenode(muGlobalContext, label, opt)
+
+proc muEndTreenode*() =
+  if muGlobalContext == nil:
+    raise newException(ValueError, "microui is not initialised!")
+  
+  muEndTreenode(muGlobalContext)
+
+proc muLayoutBeginColumn*() =
+  if muGlobalContext == nil:
+    raise newException(ValueError, "microui is not initialised!")
+  
+  muLayoutBeginColumn(muGlobalContext)
+
+proc muLayoutEndColumn*() =
+  if muGlobalContext == nil:
+    raise newException(ValueError, "microui is not initialised!")
+  
+  muLayoutEndColumn(muGlobalContext)
+
+## Global Templates
+
+template mu*(body: untyped) =
+  if muGlobalContext == nil:
+    raise newException(ValueError, "microui is not initialised!")
+  mu(muGlobalContext, body)
+
+template muWindow*(title: string, rect: MURect, body: untyped) =
+  if muGlobalContext == nil:
+    raise newException(ValueError, "microui is not initialised!")
+  muWindow(muGlobalContext, title, rect, body)
+
+template muPanel*(name: string, body: untyped) =
+  if muGlobalContext == nil:
+    raise newException(ValueError, "microui is not initialised!")
+  
+  muPanel(muGlobalContext, name, body)
+
+template muPopup*(name: string, body: untyped) =
+  if muGlobalContext == nil:
+    raise newException(ValueError, "microui is not initialised!")
+  
+  muPopup(muGlobalContext, name, body)
+
+template muTreenode*(label: string, body: untyped) =
+  if muGlobalContext == nil:
+    raise newException(ValueError, "microui is not initialised!")
+  
+  muTreenode(muGlobalContext, label, body)
