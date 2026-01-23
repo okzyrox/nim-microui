@@ -1,8 +1,8 @@
 # Package
 
-version       = "0.1.0"
+version       = "0.0.1"
 author        = "ZyroX"
-description   = "A new awesome nimble package"
+description   = "microui Port for Nim"
 license       = "MIT"
 srcDir        = "src"
 
@@ -10,3 +10,4 @@ srcDir        = "src"
 # Dependencies
 
 requires "nim >= 2.2.2"
+requires "glfw"
