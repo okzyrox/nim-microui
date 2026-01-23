@@ -1,5 +1,6 @@
-import ../src/microui/ui
+import ../ui
 import glad/gl
+import glfw
 
 const
   BUFFER_SIZE = 16384
@@ -16,6 +17,8 @@ var
   bufIdx = 0
 
 proc initRenderer*() =
+  if not gladLoadGL(getProcAddress):
+    quit("Error initialising OpenGL")
   glEnable(GL_BLEND)
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
   glDisable(GL_CULL_FACE)
@@ -25,7 +28,7 @@ proc initRenderer*() =
   glEnableClientState(GL_VERTEX_ARRAY)
   glEnableClientState(GL_TEXTURE_COORD_ARRAY)
   glEnableClientState(GL_COLOR_ARRAY)
-  
+
   var id: GLuint
   glGenTextures(1, addr id)
   glBindTexture(GL_TEXTURE_2D, id)
@@ -170,3 +173,23 @@ proc setSize*(w, h: int) =
   width = w
   height = h
 
+proc handleMuEvents*(muCtx: var ref MUContext) =
+  var cmd: ptr MUBaseCommand = nil
+  while muNextCommand(muCtx, cmd):
+    case cmd.kind
+    of MUCommandType.Text:
+      var str = ""
+      let textPtr = cast[ptr UncheckedArray[char]](addr cmd.textStr)
+      var i = 0
+      while textPtr[i] != '\0':
+        str.add(textPtr[i])
+        i += 1
+      drawText(str, cmd.textPos, cmd.textColor)
+    of MUCommandType.Rect:
+      drawRect(cmd.rectRect, cmd.rectColor)
+    of MUCommandType.Icon:
+      drawIcon(cmd.iconId, cmd.iconRect, cmd.iconColor)
+    of MUCommandType.Clip:
+      setClipRect(cmd.clipRect)
+    else:
+      discard

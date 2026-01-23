@@ -10,7 +10,3 @@ microui/*
 *.dylib
 *.so
 *.exe
-
-# temp
-
-src/microui/renderer/*

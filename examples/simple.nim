@@ -1,14 +1,12 @@
 import std/[strformat, unicode]
 
 import glfw
-import glad/gl
 
 import ../src/microui/ui
-
-import renderer
+import ../src/microui/renderer/renderer_gl
 
 var
-  muCtx: MUContext
+  muCtx: ref MUContext
 
 ## UI state
 var
@@ -24,47 +22,6 @@ proc writeLog(text: string) =
     logbuf.add("\n")
   logbuf.add(text)
   logbufUpdated = true
-
-proc cursor_pos_cb(window: Window, pos: tuple[x,y: float64]) =
-  let v = vec2(pos.x.int, pos.y.int)
-  muInputMouseMove(muCtx, v.x, v.y)
-  lastMousePos = v
-
-proc mouse_button_cb(window: Window, b: MouseButton, pressed: bool, mods: set[ModifierKey]) =
-  if b == mbLeft:
-    if pressed:
-      muInputMouseDown(muCtx, lastMousePos.x, lastMousePos.y, MUMouse.Left)
-    else:
-      muInputMouseUp(muCtx, lastMousePos.x, lastMousePos.y, MUMouse.Left)
-
-proc scroll_cb(window: Window, offset: tuple[x, y: float64]) =
-  muInputScroll(muCtx, 0, int(offset.y * -30.0))
-
-proc key_cb(window: Window, key: Key, scanCode: int32, action: KeyAction, mods: set[ModifierKey]) =
-  var mapped = 0
-  case key
-  of keyLeftShift, keyRightShift:
-    mapped = ord(MUControlKey.Shift)
-  of keyLeftControl, keyRightControl:
-    mapped = ord(MUControlKey.Ctrl)
-  of keyLeftAlt, keyRightAlt:
-    mapped = ord(MUControlKey.Alt)
-  of keyBackspace:
-    mapped = ord(MUControlKey.Backspace)
-  of keyEnter:
-    mapped = ord(MUControlKey.Return)
-  else:
-    discard
-  if mapped != 0:
-    if action == kaDown:
-      muInputKeyDown(muCtx, mapped)
-    elif action == kaUp:
-      muInputKeyUp(muCtx, mapped)
-
-proc char_cb(window: Window, codePoint: Rune) =
-  let s = $codePoint
-  if s.len > 0:
-    muInputText(muCtx, s)
 
 proc textWidth(font: MUFont, text: string, len: int): int =
   getTextWidth(text, len)
@@ -221,11 +178,54 @@ proc processFrame() =
     testWindow()
     logWindow()
 
+
+# glfw overhead
+proc cursor_pos_cb(window: Window, pos: tuple[x,y: float64]) =
+  let v = vec2(pos.x.int, pos.y.int)
+  muInputMouseMove(muCtx, v.x, v.y)
+  lastMousePos = v
+
+proc mouse_button_cb(window: Window, b: MouseButton, pressed: bool, mods: set[ModifierKey]) =
+  if b == mbLeft:
+    if pressed:
+      muInputMouseDown(muCtx, lastMousePos.x, lastMousePos.y, MUMouse.Left)
+    else:
+      muInputMouseUp(muCtx, lastMousePos.x, lastMousePos.y, MUMouse.Left)
+
+proc scroll_cb(window: Window, offset: tuple[x, y: float64]) =
+  muInputScroll(muCtx, 0, int(offset.y * -30.0))
+
+proc key_cb(window: Window, key: Key, scanCode: int32, action: KeyAction, mods: set[ModifierKey]) =
+  var mapped = 0
+  case key
+  of keyLeftShift, keyRightShift:
+    mapped = ord(MUControlKey.Shift)
+  of keyLeftControl, keyRightControl:
+    mapped = ord(MUControlKey.Ctrl)
+  of keyLeftAlt, keyRightAlt:
+    mapped = ord(MUControlKey.Alt)
+  of keyBackspace:
+    mapped = ord(MUControlKey.Backspace)
+  of keyEnter:
+    mapped = ord(MUControlKey.Return)
+  else:
+    discard
+  if mapped != 0:
+    if action == kaDown:
+      muInputKeyDown(muCtx, mapped)
+    elif action == kaUp:
+      muInputKeyUp(muCtx, mapped)
+
+proc char_cb(window: Window, codePoint: Rune) =
+  let s = $codePoint
+  if s.len > 0:
+    muInputText(muCtx, s)
+
 proc main() =
   glfw.initialize()
   
   var cfg = DefaultOpenglWindowConfig
-  cfg.size = (w: 800, h: 600)
+  cfg.size = (w: 1050, h: 750)
   cfg.title = "Nim microui Example"
   cfg.resizable = false
   cfg.version = glv21
@@ -237,9 +237,6 @@ proc main() =
   window.scrollCb = scroll_cb
   window.keyCb = key_cb
   window.charCb = char_cb
-  
-  if not gladLoadGL(getProcAddress):
-    quit("Error initialising OpenGL")
   
   glfw.swapInterval(1)
   
@@ -260,25 +257,7 @@ proc main() =
     processFrame()
     clear(color(bg[0].int, bg[1].int, bg[2].int, 255))
     
-    var cmd: ptr MUBaseCommand = nil
-    while muNextCommand(muCtx, cmd):
-      case cmd.kind
-      of MUCommandType.Text:
-        var str = ""
-        let textPtr = cast[ptr UncheckedArray[char]](addr cmd.textStr)
-        var i = 0
-        while textPtr[i] != '\0':
-          str.add(textPtr[i])
-          i += 1
-        drawText(str, cmd.textPos, cmd.textColor)
-      of MUCommandType.Rect:
-        drawRect(cmd.rectRect, cmd.rectColor)
-      of MUCommandType.Icon:
-        drawIcon(cmd.iconId, cmd.iconRect, cmd.iconColor)
-      of MUCommandType.Clip:
-        setClipRect(cmd.clipRect)
-      else:
-        discard
+    handleMuEvents(muCtx)
     
     present()
     glfw.swapBuffers(window)
