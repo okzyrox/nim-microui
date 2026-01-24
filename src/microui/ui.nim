@@ -160,7 +160,7 @@ type MUBaseCommand* = object
     textFont*: MUFont
     textPos*: MUVec2
     textColor*: MUColor
-    textStr*: char
+    textStr*: string
   of MUCommandType.Icon:
     iconRect*: MURect
     iconId*: int
@@ -357,10 +357,17 @@ proc hash(h: var uint, data: openArray[byte]) =
   for b in data:
     h = (h xor uint(b)) * 16777619
 
+proc hashPtr(h: var uint, data: pointer, size: int) =
+  if data == nil or size <= 0:
+    return
+  let bytes = cast[ptr UncheckedArray[byte]](data)
+  var i = 0
+  while i < size:
+    h = (h xor uint(bytes[i])) * 16777619
+    i += 1
+
 proc clear[T](arr: var seq[T]) =
-  let len = arr.len
-  for i in 0..<len:
-    arr.delete(i)
+  arr.setLen(0)
 
 proc assertGlobalContext*() =
   if muGlobalContext == nil:
@@ -379,15 +386,16 @@ proc muGetId*(muCtx: var ref MUContext, data: openArray[byte]): uint =
   hash(result, data)
   muCtx.lastId = result
 
-proc muGetIdStr*(muCtx: var ref MUContext, str: string): uint =
-  muGetId(muCtx, cast[seq[byte]](str))
-
 proc muGetIdPtr*(muCtx: var ref MUContext, data: pointer, size: int): uint =
-  if data == nil or size <= 0:
+  let idx = muCtx.idStack.index
+  result = if idx > 0: muCtx.idStack.items[idx - 1] else: HASH_INITIAL
+  hashPtr(result, data, size)
+  muCtx.lastId = result
+
+proc muGetIdStr*(muCtx: var ref MUContext, str: string): uint =
+  if str.len == 0:
     return muGetId(muCtx, [])
-  var bytes = newSeq[byte](size)
-  copyMem(addr bytes[0], data, size)
-  muGetId(muCtx, bytes)
+  return muGetIdPtr(muCtx, unsafeAddr str[0], str.len)
 
 proc muPushIdPtr*(muCtx: var ref MUContext, data: pointer, size: int) =
   let id = muGetIdPtr(muCtx, data, size)
@@ -401,7 +409,9 @@ proc muPushId*(muCtx: var ref MUContext, data: openArray[byte]) =
     muCtx.idStack.index += 1
 
 proc muPushIdStr*(muCtx: var ref MUContext, str: string) =
-  muPushId(muCtx, cast[seq[byte]](str))
+  if muCtx.idStack.index < MICROUI_IDSTACK_SIZE:
+    muCtx.idStack.items[muCtx.idStack.index] = muGetIdStr(muCtx, str)
+    muCtx.idStack.index += 1
 
 proc muGetClipRect*(muCtx: var ref MUContext): MURect =
   if muCtx.clipStack.index > 0:
@@ -530,12 +540,14 @@ proc muInputMouseUp*(muCtx: var ref MUContext, x, y: int; btn: int) =
     for i in 0..<muCtx.mouseDown.len:
       if muCtx.mouseDown[i] == mouse:
         muCtx.mouseDown.delete(i)
+        break
 
 proc muInputMouseUp*(muCtx: var ref MUContext, x, y: int, btn: MUMouse) =
   if btn in muCtx.mouseDown:
     for i in 0..<muCtx.mouseDown.len:
       if muCtx.mouseDown[i] == btn:
         muCtx.mouseDown.delete(i)
+        break
 
 proc muInputMouseUp*(muCtx: var ref MUContext, btn: int) =
   let mouse = getMouseFromBtn(btn)
@@ -544,12 +556,14 @@ proc muInputMouseUp*(muCtx: var ref MUContext, btn: int) =
     for i in 0..<muCtx.mouseDown.len:
       if muCtx.mouseDown[i] == mouse:
         muCtx.mouseDown.delete(i)
+        break
 
 proc muInputMouseUp*(muCtx: var ref MUContext, btn: MUMouse) =
   if btn in muCtx.mouseDown:
     for i in 0..<muCtx.mouseDown.len:
       if muCtx.mouseDown[i] == btn:
         muCtx.mouseDown.delete(i)
+        break
 
 proc isPressed*(muCtx: var ref MUContext, btn: MUMouse): bool =
   result = btn in muCtx.mousePressed

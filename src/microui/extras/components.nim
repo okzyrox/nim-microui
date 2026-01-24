@@ -4,7 +4,7 @@
 import ../ui
 import ./utils
 
-import std/[browsers]
+import std/[browsers, math]
 
 ## Extra/MenuBar
 ## A menu bar that runs across the top of the Window or a specified width (if running without a Window)
@@ -367,3 +367,62 @@ template muWindow*(title: string, rect: MURect, isOpen: var bool, opt: int, body
   assertGlobalContext()
   
   muWindow(muGlobalContext, title, rect, isOpen, opt, body)
+
+
+## Extras/ByteSlider
+## A slider for byte values
+
+proc muByteSlider*(muCtx: var ref MUContext, value: var byte, opt: int = 0): int =
+  var tmp = value.float
+  muPushIdStr(muCtx, $cast[int](addr value))
+  let res = muSlider(muCtx, tmp, byte.low.float, byte.high.float, 1.0, opt)
+  value = tmp.byte
+  muPopId(muCtx)
+  return res
+
+proc muByteSlider*(value: var byte, opt: int = 0): int =
+  assertGlobalContext()
+  
+  return muByteSlider(muGlobalContext, value, opt)
+
+proc muByteSlider*(muCtx: var ref MUContext, value: var byte, low, high: byte, step: byte = 1, opt: int = 0): int =
+  var tmp = value.float
+  muPushIdStr(muCtx, $cast[int](addr value))
+  let res = muSlider(muCtx, tmp, low.float, high.float, step.float, opt)
+  value = tmp.byte
+  muPopId(muCtx)
+  return res
+
+proc muByteSlider*(value: var byte, low, high: byte, step: byte = 1, opt: int = 0): int =
+  assertGlobalContext()
+  
+  return muByteSlider(muGlobalContext, value, low, high, step, opt)
+
+## Extras/IntSlider
+## A slider for int values
+
+proc muIntSlider*(muCtx: var ref MUContext, value: var int, opt: int = 0): int =
+  var tmp = value.float
+  muPushIdStr(muCtx, $cast[int](addr value))
+  let res = muSlider(muCtx, tmp, int.low.float, int.high.float, 1.0, opt)
+  value = tmp.int
+  muPopId(muCtx)
+  return res
+
+proc muIntSlider*(value: var int, opt: int = 0): int =
+  assertGlobalContext()
+
+  return muIntSlider(muGlobalContext, value, opt)
+
+proc muIntSlider*(muCtx: var ref MUContext, value: var int, low, high: int, step: int = 1, opt: int = 0): int =
+  var tmp = value.float
+  muPushIdStr(muCtx, $cast[int](addr value))
+  let res = muSlider(muCtx, tmp, low.float, high.float, step.float, opt)
+  value = tmp.int
+  muPopId(muCtx)
+  return res
+
+proc muIntSlider*(value: var int, low, high: int, step: int = 1, opt: int = 0): int =
+  assertGlobalContext()
+
+  return muIntSlider(muGlobalContext, value, low, high, step, opt)

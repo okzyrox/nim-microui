@@ -191,13 +191,7 @@ proc handleMuEvents*(muCtx: var ref MUContext) =
   while muNextCommand(muCtx, cmd):
     case cmd.kind
     of MUCommandType.Text:
-      var str = ""
-      let textPtr = cast[ptr UncheckedArray[char]](addr cmd.textStr)
-      var i = 0
-      while textPtr[i] != '\0':
-        str.add(textPtr[i])
-        i += 1
-      drawText(str, cmd.textPos, cmd.textColor)
+      drawText(cmd.textStr, cmd.textPos, cmd.textColor)
     of MUCommandType.Rect:
       drawRect(cmd.rectRect, cmd.rectColor)
     of MUCommandType.Icon:

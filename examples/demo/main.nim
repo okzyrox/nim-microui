@@ -221,7 +221,7 @@ proc menuBar() =
         if muButton("Copy"): 
           writeLog("Edit/Copy")
       
-      muMenuBarTab("Help"):
+      muMenuBarTab("Toggle"):
         if muButton("About"): 
           aboutWindowOpen = not aboutWindowOpen
     
