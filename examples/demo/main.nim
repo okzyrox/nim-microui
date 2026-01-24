@@ -6,7 +6,7 @@ import ../../src/microui
 import ../../src/microui/renderer/opengl21
 
 when defined(extras):
-  import ../src/microui/extras
+  import ../../src/microui/extras
 
 const
   WINDOW_WIDTH = 1050
@@ -313,7 +313,7 @@ proc main() =
   
   glfw.swapInterval(1)
   
-  initRenderer()
+  initRenderer(getProcAddress)
   
   muInit(muCtx)
   muCtx.text_width = textWidth
