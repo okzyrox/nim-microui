@@ -1,4 +1,4 @@
-## microui
+## nim-microui
 ## License: MIT
 
 import microui/[

@@ -3,7 +3,7 @@ import std/[strformat, unicode]
 import glfw
 
 import ../src/microui
-import ../src/microui/renderer/renderer_gl
+import ../src/microui/renderer/opengl21
 
 when defined(extras):
   import ../src/microui/extras

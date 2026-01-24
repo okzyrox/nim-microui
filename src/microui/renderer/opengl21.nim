@@ -1,4 +1,4 @@
-## microui - OpenGL/GLFW renderer
+## nim-microui - OpenGL 2.1 (min) / GLFW renderer
 ## License: MIT
 
 import ../ui
@@ -142,6 +142,16 @@ proc drawIcon*(id: int, r: MURect, color: MUColor) =
   let y = r.y + (r.h - src.h) div 2
   pushQuad(rect(x, y, src.w, src.h), src, color)
 
+proc drawImage*(id: int, r: MURect, color: MUColor, image: pointer) =
+  ## TODO: see if can reduce texture creation overhead every time
+  ## maybe integrate with texBuf
+  discard
+  # var textureId: GLuint
+  # glGenTextures(1, addr textureId)
+
+  # glBindTexture(GL_TEXTURE_2D, textureId)
+  # glTexImage2D(GL_TEXTURE_2D, 0.GLint, GL_RGBA.GLint, r.w.GLsizei, r.h.GLsizei, 0.Glint, GL_RGBA, GL_UNSIGNED_BYTE, image)
+
 proc getTextWidth*(text: string, len: int): int =
   result = 0
   var remaining = len
@@ -194,5 +204,7 @@ proc handleMuEvents*(muCtx: var ref MUContext) =
       drawIcon(cmd.iconId, cmd.iconRect, cmd.iconColor)
     of MUCommandType.Clip:
       setClipRect(cmd.clipRect)
+    of MUCommandType.Image:
+      drawImage(cmd.imageId, cmd.imageRect, cmd.imageColor, cmd.imageData)
     else:
       discard

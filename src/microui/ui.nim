@@ -1,10 +1,11 @@
-## microui - UI
+## nim-microui - UI
 ## License: MIT
 
 import std/[
   bitops,
   math,
-  strformat
+  strformat,
+  sequtils
 ]
 
 const
@@ -23,6 +24,7 @@ const
 
 ##/ Enums
 type MUClip* = enum
+  None = 0
   Partial = 1
   All = 2
 
@@ -32,7 +34,10 @@ type MUCommandType* = enum
   Rect = 2
   Text = 3
   Icon = 4
-  Max = 5
+  ## Extras:
+  Image = 5
+  ## End
+  Max = 6
 
 type MULayoutType* = enum
   Relative
@@ -95,9 +100,9 @@ type MUWindowOption* = enum
   Expanded = 1 shl 12
 
 type MUMouse* = enum
-  Left = 1 shl 0
-  Right = 1 shl 1
-  Middle = 1 shl 2
+  Left = 1
+  Right = 2
+  Middle = 3
 
 type MUControlKey* = enum
   Shift = 1 shl 0
@@ -160,6 +165,11 @@ type MUBaseCommand* = object
     iconRect*: MURect
     iconId*: int
     iconColor*: MUColor
+  of MUCommandType.Image:
+    imageRect*: MURect
+    imageId*: int
+    imageColor*: MUColor
+    imageData*: pointer
   else:
     discard
 
@@ -283,8 +293,8 @@ type MUContext* = object
   mouseDelta: MUVec2
   scrollDelta: MUVec2
 
-  mouseDown*: int
-  mousePressed*: int
+  mouseDown*: seq[MUMouse]
+  mousePressed*: seq[MUMouse]
   keyDown*: int
   keyPressed*: int
   inputText*: array[32, char]
@@ -347,6 +357,22 @@ proc hash(h: var uint, data: openArray[byte]) =
   for b in data:
     h = (h xor uint(b)) * 16777619
 
+proc clear[T](arr: var seq[T]) =
+  let len = arr.len
+  for i in 0..<len:
+    arr.delete(i)
+
+proc assertGlobalContext*() =
+  if muGlobalContext == nil:
+    raise newException(ValueError, "microui is not initialised!")
+
+proc getMouseFromBtn(btn: int): MUMouse =
+  case btn
+  of 0: result = MUMouse.Left
+  of 1: result = MUMouse.Right
+  of 2: result = MUMouse.Middle
+  else: result = MUMouse.Left
+
 proc muGetId*(muCtx: var ref MUContext, data: openArray[byte]): uint =
   let idx = muCtx.idStack.index
   result = if idx > 0: muCtx.idStack.items[idx - 1] else: HASH_INITIAL
@@ -397,13 +423,13 @@ proc muPopClipRect*(muCtx: var ref MUContext) =
   if muCtx.clipStack.index > 0:
     muCtx.clipStack.index -= 1
 
-proc muCheckClip*(muCtx: var ref MUContext, r: MURect): int =
+proc muCheckClip*(muCtx: var ref MUContext, r: MURect): MUClip =
   let cr = muGetClipRect(muCtx)
   if r.x > cr.x + cr.w or r.x + r.w < cr.x or r.y > cr.y + cr.h or r.y + r.h < cr.y:
-    return ord(MUClip.All)
+    return All
   if r.x >= cr.x and r.x + r.w <= cr.x + cr.w and r.y >= cr.y and r.y + r.h <= cr.y + cr.h:
-    return 0
-  return ord(MUClip.Partial)
+    return None
+  return Partial
 
 proc muPoolUpdate*(muCtx: var ref MUContext, items: var openArray[MUPoolItem], idx: int) =
   items[idx].lastUpdate = muCtx.frame
@@ -469,37 +495,107 @@ proc muInputMouseMove*(muCtx: var ref MUContext, x, y: int) =
 
 proc muInputMouseDown*(muCtx: var ref MUContext, x, y: int; btn: int) =
   muCtx.muInputMouseMove(x, y)
-  muCtx.mouseDown = bitor[int](muCtx.mouseDown, btn)
-  muCtx.mousePressed = bitor[int](muCtx.mousePressed, btn)
+  let mouse = getMouseFromBtn(btn)
+
+  if mouse notin muCtx.mouseDown:
+    muCtx.mouseDown.add(mouse)
+  if mouse notin muCtx.mousePressed:
+    muCtx.mousePressed.add(mouse)
 
 proc muInputMouseDown*(muCtx: var ref MUContext, x, y: int, btn: MUMouse) =
-  let btn = ord(btn)
-  muCtx.mouseDown = bitor[int](muCtx.mouseDown, btn)
-  muCtx.mousePressed = bitor[int](muCtx.mousePressed, btn)
+  if btn notin muCtx.mouseDown:
+    muCtx.mouseDown.add(btn)
+  if btn notin muCtx.mousePressed:
+    muCtx.mousePressed.add(btn)
 
 proc muInputMouseDown*(muCtx: var ref MUContext, btn: int) =
-  muCtx.mouseDown = bitor[int](muCtx.mouseDown, btn)
-  muCtx.mousePressed = bitor[int](muCtx.mousePressed, btn)
+  let mouse = getMouseFromBtn(btn)
+  if mouse notin muCtx.mouseDown:
+    muCtx.mouseDown.add(mouse)
+  
+  if mouse notin muCtx.mousePressed:
+    muCtx.mousePressed.add(mouse)
 
 proc muInputMouseDown*(muCtx: var ref MUContext, btn: MUMouse) =
-  let btn = ord(btn)
-  muCtx.mouseDown = bitor[int](muCtx.mouseDown, btn)
-  muCtx.mousePressed = bitor[int](muCtx.mousePressed, btn)
+  if btn notin muCtx.mouseDown:
+    muCtx.mouseDown.add(btn)
+  
+  if btn notin muCtx.mousePressed:
+    muCtx.mousePressed.add(btn)
 
 proc muInputMouseUp*(muCtx: var ref MUContext, x, y: int; btn: int) =
-  muCtx.muInputMouseMove(x, y)
-  muCtx.mouseDown = bitand[int](muCtx.mouseDown, bitnot(btn))
+  let mouse = getMouseFromBtn(btn)
+
+  if mouse in muCtx.mouseDown:
+    for i in 0..<muCtx.mouseDown.len:
+      if muCtx.mouseDown[i] == mouse:
+        muCtx.mouseDown.delete(i)
 
 proc muInputMouseUp*(muCtx: var ref MUContext, x, y: int, btn: MUMouse) =
-  let btn = ord(btn)
-  muCtx.mouseDown = bitand[int](muCtx.mouseDown, bitnot(btn))
+  if btn in muCtx.mouseDown:
+    for i in 0..<muCtx.mouseDown.len:
+      if muCtx.mouseDown[i] == btn:
+        muCtx.mouseDown.delete(i)
 
 proc muInputMouseUp*(muCtx: var ref MUContext, btn: int) =
-  muCtx.mouseDown = bitand[int](muCtx.mouseDown, bitnot(btn))
+  let mouse = getMouseFromBtn(btn)
+
+  if mouse in muCtx.mouseDown:
+    for i in 0..<muCtx.mouseDown.len:
+      if muCtx.mouseDown[i] == mouse:
+        muCtx.mouseDown.delete(i)
 
 proc muInputMouseUp*(muCtx: var ref MUContext, btn: MUMouse) =
-  let btn = ord(btn)
-  muCtx.mouseDown = bitand[int](muCtx.mouseDown, bitnot(btn))
+  if btn in muCtx.mouseDown:
+    for i in 0..<muCtx.mouseDown.len:
+      if muCtx.mouseDown[i] == btn:
+        muCtx.mouseDown.delete(i)
+
+proc isPressed*(muCtx: var ref MUContext, btn: MUMouse): bool =
+  result = btn in muCtx.mousePressed
+
+proc isPressed*(btn: MUMouse): bool =
+  assertGlobalContext()
+  result = btn in muGlobalContext.mousePressed
+
+proc isPressed*(muCtx: var ref MUContext, btn: int): bool =
+  let mouse = getMouseFromBtn(btn)
+  result = mouse in muCtx.mousePressed
+
+proc isPressed*(btn: int): bool =
+  assertGlobalContext()
+  let mouse = getMouseFromBtn(btn)
+  result = mouse in muGlobalContext.mousePressed
+
+proc isDown*(muCtx: var ref MUContext, btn: MUMouse): bool =
+  result = btn in muCtx.mouseDown
+
+proc isDown*(btn: MUMouse): bool =
+  assertGlobalContext()
+  result = btn in muGlobalContext.mouseDown
+
+proc isDown*(muCtx: var ref MUContext, btn: int): bool =
+  let mouse = getMouseFromBtn(btn)
+  result = mouse in muCtx.mouseDown
+
+proc isDown*(btn: int): bool =
+  assertGlobalContext()
+  let mouse = getMouseFromBtn(btn)
+  result = mouse in muGlobalContext.mouseDown
+
+proc isAnyMouseDown*(muCtx: var ref MUContext): bool =
+  result = muCtx.mouseDown.len > 0
+
+proc isAnyMouseDown*(): bool =
+  assertGlobalContext()
+  result = muGlobalContext.mouseDown.len > 0
+
+proc isAnyMousePressed*(muCtx: var ref MUContext): bool =
+  result = muCtx.mousePressed.len > 0
+
+proc isAnyMousePressed*(): bool =
+  assertGlobalContext()
+  result = muGlobalContext.mousePressed.len > 0
 
 proc muInputScroll*(muCtx: var ref MUContext, x, y: int) =
   muCtx.scrollDelta.x += x
@@ -587,9 +683,9 @@ proc muDrawBox*(muCtx: var ref MUContext, boxRect: MURect, color: MUColor) =
 proc muDrawText*(muCtx: var ref MUContext, font: MUFont, str: string, pos: MUVec2, color: MUColor) =
   let r = rect(pos.x, pos.y, muCtx.text_width(font, str, str.len), muCtx.text_height(font))
   let clipped = muCheckClip(muCtx, r)
-  if clipped == ord(MUClip.All):
+  if clipped == MUClip.All:
     return
-  if clipped == ord(MUClip.Partial):
+  if clipped == MUClip.Partial:
     muSetClip(muCtx, muGetClipRect(muCtx))
   let size = sizeof(MUBaseCommand) + str.len
   if muCtx.commandList.index + size <= MICROUI_COMMANDLIST_SIZE:
@@ -605,15 +701,15 @@ proc muDrawText*(muCtx: var ref MUContext, font: MUFont, str: string, pos: MUVec
       copyMem(textDest, unsafeAddr str[0], str.len)
     textDest[str.len] = '\0'
     muCtx.commandList.index += size
-  if clipped != 0:
+  if clipped != None:
     muSetClip(muCtx, UnclippedRect)
 
 proc muDrawIcon*(muCtx: var ref MUContext, id: int, rect: MURect, color: MUColor) =
   var cmd: MUBaseCommand
   let clipped = muCheckClip(muCtx, rect)
-  if clipped == ord(MUClip.All):
+  if clipped == All:
     return
-  if clipped == ord(MUClip.Partial):
+  if clipped == Partial:
     muSetClip(muCtx, muGetClipRect(muCtx))
   {.cast(uncheckedAssign).}:
     cmd.kind = MUCommandType.Icon
@@ -622,7 +718,25 @@ proc muDrawIcon*(muCtx: var ref MUContext, id: int, rect: MURect, color: MUColor
     cmd.iconRect = rect
     cmd.iconColor = color
   muPushCommand(muCtx, cmd)
-  if clipped != 0:
+  if clipped != None:
+    muSetClip(muCtx, UnclippedRect)
+
+proc muDrawImage*(muCtx: var ref MUContext, id: int, rect: MURect, color: MUColor, data: pointer) =
+  var cmd: MUBaseCommand
+  let clipped = muCheckClip(muCtx, rect)
+  if clipped == All:
+    return
+  if clipped == Partial:
+    muSetClip(muCtx, muGetClipRect(muCtx))
+  {.cast(uncheckedAssign).}:
+    cmd.kind = MUCommandType.Image
+    cmd.size = sizeof(MUBaseCommand)
+    cmd.imageId = id
+    cmd.imageRect = rect
+    cmd.imageColor = color
+    cmd.imageData = data
+  muPushCommand(muCtx, cmd)
+  if clipped != None:
     muSetClip(muCtx, UnclippedRect)
   
 proc getLayout*(muCtx: var ref MUContext): ptr MULayout =
@@ -758,21 +872,21 @@ proc muUpdateControl*(muCtx: var ref MUContext, id: uint, rect: MURect, opt: int
     muCtx.updatedFocus = true
   if (opt and (1 shl ord(MUWindowOption.NoInteract))) != 0:
     return
-  if mouseover and muCtx.mouseDown == 0:
+  if mouseover and not muCtx.isAnyMouseDown:
     muCtx.hover = id
   
   if muCtx.focus == id:
-    if muCtx.mousePressed != 0 and not mouseover:
+    if muCtx.isAnyMousePressed and not mouseover:
       muSetFocus(muCtx, 0)
-    if muCtx.mouseDown == 0 and (opt and (1 shl ord(MUWindowOption.HoldFocus))) == 0:
+    if not muCtx.isAnyMouseDown and (opt and (1 shl ord(MUWindowOption.HoldFocus))) == 0:
       muSetFocus(muCtx, 0)
   
   if muCtx.hover == id:
-    if muCtx.mousePressed != 0:
+    if muCtx.isAnyMousePressed:
       muSetFocus(muCtx, id)
     elif not mouseover:
       muCtx.hover = 0
-  elif mouseover and muCtx.mousePressed != 0:
+  elif mouseover and muCtx.isAnyMousePressed:
     muSetFocus(muCtx, id)
 
 proc drawFrame(muCtx: var ref MUContext, rect: MURect, colorid: int): void =
@@ -850,7 +964,7 @@ proc muButton*(muCtx: var ref MUContext, label: string, icon: int = 0, opt: int 
     id = muGetId(muCtx, cast[seq[byte]](@[byte(icon)]))
   let r = muLayoutNext(muCtx)
   muUpdateControl(muCtx, id, r, opt)
-  if muCtx.mousePressed == ord(MUMouse.Left) and muCtx.focus == id:
+  if muCtx.isPressed(MUMouse.Left) and muCtx.focus == id:
     result = result or (1 shl ord(MUResult.Submit)) != 0
   muDrawControlFrame(muCtx, id, r, ord(MUElementColor.ColorButton), opt)
   if label.len > 0:
@@ -864,7 +978,7 @@ proc muCheckbox*(muCtx: var ref MUContext, label: string, state: var bool): int 
   let r = muLayoutNext(muCtx)
   let box = rect(r.x, r.y, r.h, r.h)
   muUpdateControl(muCtx, id, r, 0)
-  if muCtx.mousePressed == ord(MUMouse.Left) and muCtx.focus == id:
+  if muCtx.isPressed(MUMouse.Left) and muCtx.focus == id:
     result = result or (1 shl ord(MUResult.Change))
     state = not state
   muDrawControlFrame(muCtx, id, box, ord(MUElementColor.ColorBase), 0)
@@ -921,7 +1035,7 @@ proc muSlider*(muCtx: var ref MUContext, value: var float, low, high: float, ste
   
   muUpdateControl(muCtx, id, base, opt)
   
-  if muCtx.focus == id and bitor[int](muCtx.mouseDown, muCtx.mousePressed) == ord(MUMouse.Left):
+  if muCtx.focus == id and (muCtx.isPressed(MUMouse.Left) or muCtx.isDown(MUMouse.Left)):
     v = low + (muCtx.mousePos.x - base.x).float * (high - low) / base.w.float
     if step != 0:
       v = (round((v / step).float) * step)
@@ -949,7 +1063,7 @@ proc header(muCtx: var ref MUContext, label: string, isTreenode: bool, opt: int)
   let r = muLayoutNext(muCtx)
   muUpdateControl(muCtx, id, r, 0)
 
-  if muCtx.mousePressed == ord(MUMouse.Left) and muCtx.focus == id:
+  if muCtx.isPressed(MUMouse.Left) and muCtx.focus == id:
     active = not active
 
   if idx >= 0:
@@ -1036,7 +1150,7 @@ proc pushContainerBody(muCtx: var ref MUContext, cnt: ptr MUContainer, body: MUR
       base.w = muCtx.style.scrollbarSize
       let id = muGetIdStr(muCtx, "!scrollbary")
       muUpdateControl(muCtx, id, base, 0)
-      if muCtx.focus == id and muCtx.mouseDown == ord(MUMouse.Left):
+      if muCtx.focus == id and muCtx.isDown(MUMouse.Left):
         cnt.scroll.y += muCtx.mouseDelta.y * cs.y div base.h
       cnt.scroll.y = clamp(cnt.scroll.y, 0, maxScrollY)
       drawFrame(muCtx, base, ord(MUElementColor.ColorScrollBase))
@@ -1055,7 +1169,7 @@ proc pushContainerBody(muCtx: var ref MUContext, cnt: ptr MUContainer, body: MUR
       base.h = muCtx.style.scrollbarSize
       let id = muGetIdStr(muCtx, "!scrollbarx")
       muUpdateControl(muCtx, id, base, 0)
-      if muCtx.focus == id and muCtx.mouseDown == ord(MUMouse.Left):
+      if muCtx.focus == id and muCtx.isDown(MUMouse.Left):
         cnt.scroll.x += muCtx.mouseDelta.x * cs.x div base.w
       cnt.scroll.x = clamp(cnt.scroll.x, 0, maxScrollX)
       drawFrame(muCtx, base, ord(MUElementColor.ColorScrollBase))
@@ -1093,7 +1207,7 @@ proc muBeginWindow*(muCtx: var ref MUContext, title: string, rect: MURect, opt: 
     let titleId = muGetIdStr(muCtx, "!title")
     muUpdateControl(muCtx, titleId, titleRect, opt)
     muDrawControlText(muCtx, title, titleRect, ord(MUElementColor.ColorTitleText), 0)
-    if titleId == muCtx.focus and muCtx.mouseDown == ord(MUMouse.Left):
+    if titleId == muCtx.focus and muCtx.isDown(MUMouse.Left):
       cnt.rect.x += muCtx.mouseDelta.x
       cnt.rect.y += muCtx.mouseDelta.y
     bodyRect.y += titleRect.h
@@ -1103,7 +1217,7 @@ proc muBeginWindow*(muCtx: var ref MUContext, title: string, rect: MURect, opt: 
       let closeRect = rect(titleRect.x + titleRect.w - titleRect.h, titleRect.y, titleRect.h, titleRect.h)
       muDrawIcon(muCtx, ord(MUIcon.Close), closeRect, muCtx.style.colors[MUElementColor.ColorTitleText])
       muUpdateControl(muCtx, closeId, closeRect, opt)
-      if muCtx.mousePressed == ord(MUMouse.Left) and closeId == muCtx.focus:
+      if muCtx.isPressed(MUMouse.Left) and closeId == muCtx.focus:
         cnt.open = 0
       titleRect.w -= closeRect.w
 
@@ -1114,7 +1228,7 @@ proc muBeginWindow*(muCtx: var ref MUContext, title: string, rect: MURect, opt: 
     let resizeId = muGetIdStr(muCtx, "!resize")
     let resizeRect = rect(rect.x + rect.w - sz, rect.y + rect.h - sz, sz, sz)
     muUpdateControl(muCtx, resizeId, resizeRect, opt)
-    if resizeId == muCtx.focus and muCtx.mouseDown == ord(MUMouse.Left):
+    if resizeId == muCtx.focus and muCtx.isDown(MUMouse.Left):
       cnt.rect.w = max(96, cnt.rect.w + muCtx.mouseDelta.x)
       cnt.rect.h = max(64, cnt.rect.h + muCtx.mouseDelta.y)
 
@@ -1124,7 +1238,7 @@ proc muBeginWindow*(muCtx: var ref MUContext, title: string, rect: MURect, opt: 
       cnt.rect.w = cnt.contentSize.x + (cnt.rect.w - layout.body.w)
       cnt.rect.h = cnt.contentSize.y + (cnt.rect.h - layout.body.h)
 
-  if (opt and (1 shl ord(MUWindowOption.Popup))) != 0 and muCtx.mousePressed != 0 and muCtx.hoverRoot != cnt:
+  if (opt and (1 shl ord(MUWindowOption.Popup))) != 0 and muCtx.isAnyMousePressed and muCtx.hoverRoot != cnt:
     cnt.open = 0
 
   muPushClipRect(muCtx, cnt.body)
@@ -1195,14 +1309,14 @@ proc muEnd*(muCtx: var ref MUContext) =
   
   muCtx.updatedFocus = false
   
-  if muCtx.mousePressed != 0 and muCtx.nextHoverRoot != nil and 
+  if muCtx.isAnyMousePressed and muCtx.nextHoverRoot != nil and 
      muCtx.nextHoverRoot.zIndex < muCtx.lastZIndex and 
      muCtx.nextHoverRoot.zIndex >= 0:
     muBringToFront(muCtx, muCtx.nextHoverRoot)
   
   muCtx.keyPressed = 0
   muCtx.inputText[0] = '\0'
-  muCtx.mousePressed = 0
+  muCtx.mousePressed.clear()
   muCtx.scrollDelta = vec2(0, 0)
   muCtx.lastMousePos = muCtx.mousePos
 
@@ -1285,176 +1399,158 @@ template muLayoutColumn*(muCtx: var ref MUContext, body: untyped) =
 ## Global funcs
 
 proc muInputMouseDown*(btn: MUMouse) =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
+
   muInputMouseDown(muGlobalContext, btn)
 
 proc muInputMouseUp*(btn: MUMouse) =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
   
   muInputMouseUp(muGlobalContext, btn)
 
 proc muInputMouseMove*(x, y: int) =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
   
   muInputMouseMove(muGlobalContext, x, y)
 
 proc muInputScroll*(dx, dy: int) =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
   
   muInputScroll(muGlobalContext, dx, dy)
 
 proc muInputKeyDown*(key: int) =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
   
   muInputKeyDown(muGlobalContext, key)
 
 proc muInputKeyUp*(key: int) =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
   
   muInputKeyUp(muGlobalContext, key)
 
 proc muInputText*(text: string) =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
     
   muInputText(muGlobalContext, text)
 
 proc muLayoutRow*(cols: int, widths: openArray[int], height: int) =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
   
   muLayoutRow(muGlobalContext, cols, widths, height)
 
 proc muText*(text: string) =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
+
   muText(muGlobalContext, text)
 
 proc muLabel*(text: string) =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
+
   muLabel(muGlobalContext, text)
 
 proc muButton*(label: string, icon: int = 0, opt: int = 0): bool =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
+
   return muButton(muGlobalContext, label, icon, opt)
 
 proc muCheckbox*(label: string, state: var bool): int =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
+
   return muCheckbox(muGlobalContext, label, state)
 
 proc muTextbox*(buf: var string, opt: int = 0): int =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
+
   return muTextbox(muGlobalContext, buf, opt)
 
 proc muSlider*(value: var float, low, high: float, step: float = 0, opt: int = 0): int =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
+
   return muSlider(muGlobalContext, value, low, high, step, opt)
   
 proc muHeader*(label: string, opt: int = 0): bool =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
+
   return muHeader(muGlobalContext, label, opt)
 
 proc muBeginWindow*(title: string, rect: MURect, opt: int = 0): bool =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
+
   return muBeginWindow(muGlobalContext, title, rect, opt)
 
 proc muEndWindow*() =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
+
   muEndWindow(muGlobalContext)
 
 proc muOpenPopup*(name: string) =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
+
   muOpenPopup(muGlobalContext, name)
 
 proc muBeginPopup*(name: string): bool =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
   
   return muBeginPopup(muGlobalContext, name)
 
 proc muEndPopup*() =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
   
   muEndPopup(muGlobalContext)
 
 proc muBeginPanel*(name: string, opt: int = 0) =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
   
   muBeginPanel(muGlobalContext, name, opt)
 
 proc muEndPanel*() =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
   
   muEndPanel(muGlobalContext)
 
 proc muBeginTreenode*(label: string, opt: int = 0): bool =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
   
   return muBeginTreenode(muGlobalContext, label, opt)
 
 proc muEndTreenode*() =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
   
   muEndTreenode(muGlobalContext)
 
 proc muLayoutBeginColumn*() =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
   
   muLayoutBeginColumn(muGlobalContext)
 
 proc muLayoutEndColumn*() =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
   
   muLayoutEndColumn(muGlobalContext)
 
 ## Global Templates
 
 template mu*(body: untyped) =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
+
   mu(muGlobalContext, body)
 
 template muWindow*(title: string, rect: MURect, body: untyped) =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
+
   muWindow(muGlobalContext, title, rect, body)
 
 template muPanel*(name: string, body: untyped) =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
   
   muPanel(muGlobalContext, name, body)
 
 template muPopup*(name: string, body: untyped) =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
   
   muPopup(muGlobalContext, name, body)
 
 template muTreenode*(label: string, body: untyped) =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
   
   muTreenode(muGlobalContext, label, body)

@@ -1,3 +1,6 @@
+## nim-microui - Builtin font atlas
+## License: MIT
+
 type AtlasFont = enum
   White = MUIcon.Max
   Font

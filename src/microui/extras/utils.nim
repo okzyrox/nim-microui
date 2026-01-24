@@ -1,4 +1,4 @@
-## microui - Extra utility functions
+## nim-microui - Extra utility functions
 ## License: MIT
 
 import ../ui

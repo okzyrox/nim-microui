@@ -1,4 +1,4 @@
-## microui - Extras
+## nim-microui - Extras
 ## License: MIT
 
 import extras/[

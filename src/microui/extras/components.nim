@@ -1,4 +1,4 @@
-## microui - Extra UI Components
+## nim-microui - Extra UI Components
 ## License: MIT
 
 import ../ui
@@ -64,8 +64,8 @@ proc muBeginMenuBar*(muCtx: var ref MUContext, x: int = 0, y: int = 0, width: in
   return true
 
 proc muBeginMenuBar*(x: int = 0, y: int = 0, width: int = 0): bool =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
+
   return muBeginMenuBar(muGlobalContext, x, y, width)
 
 proc muEndMenuBar*(muCtx: var ref MUContext) =
@@ -91,8 +91,8 @@ proc muEndMenuBar*(muCtx: var ref MUContext) =
   muCtx.muPopClipRect()
 
 proc muEndMenuBar*() =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
+
   muEndMenuBar(muGlobalContext)
 
 template muMenuBar*(muCtx: var ref MUContext, body: untyped) =
@@ -103,8 +103,7 @@ template muMenuBar*(muCtx: var ref MUContext, body: untyped) =
       muEndMenuBar(muCtx)
 
 template muMenuBar*(body: untyped) =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
   
   muMenuBar(muGlobalContext, body)
 
@@ -116,8 +115,8 @@ template muMenuBar*(muCtx: var ref MUContext, x, y, width: int, body: untyped) =
       muEndMenuBar(muCtx)
   
 template muMenuBar*(x, y, width: int, body: untyped) =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
+
   muMenuBar(muGlobalContext, x, y, width, body)
     
 ## Extra/MenuBarTab
@@ -149,7 +148,7 @@ proc muBeginMenuBarTab*(muCtx: var ref MUContext, label: string): bool =
   muCtx.muDrawRect(r, muCtx.style.colors[MUElementColor(colorId)])
   muCtx.muDrawControlText(label, r, ord(MUElementColor.ColorText), 1 shl ord(MUWindowOption.AlignCenter))
   
-  if muCtx.mousePressed == ord(MUMouse.Left) and muCtx.hover == id:
+  if muCtx.isPressed(MUMouse.Left) and muCtx.hover == id:
     if activeMenuTab == id:
       activeMenuTab = 0
     else:
@@ -164,7 +163,7 @@ proc muBeginMenuBarTab*(muCtx: var ref MUContext, label: string): bool =
       cnt.rect.x = r.x
       cnt.rect.y = r.y + r.h
       
-      if muCtx.mousePressed != 0 and muCtx.hoverRoot != cnt:
+      if muCtx.isAnyMousePressed and muCtx.hoverRoot != cnt:
         activeMenuTab = 0
       return true
     else:
@@ -173,16 +172,16 @@ proc muBeginMenuBarTab*(muCtx: var ref MUContext, label: string): bool =
   return false
 
 proc muBeginMenuBarTab*(label: string): bool =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
+
   return muBeginMenuBarTab(muGlobalContext, label)
 
 proc muEndMenuBarTab*(muCtx: var ref MUContext) =
   muCtx.muEndPopup()
 
 proc muEndMenuBarTab*() =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
+
   muEndMenuBarTab(muGlobalContext)
 
 template muMenuBarTab*(muCtx: var ref MUContext, label: string, body: untyped) =
@@ -193,8 +192,8 @@ template muMenuBarTab*(muCtx: var ref MUContext, label: string, body: untyped) =
       muEndMenuBarTab(muCtx)
 
 template muMenuBarTab*(label: string, body: untyped) =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
+
   muMenuBarTab(muGlobalContext, label, body)
 
 ## Extras/Separator
@@ -206,8 +205,8 @@ proc muSeparator*(muCtx: var ref MUContext) =
   muCtx.muDrawRect(lineRect, muCtx.style.colors[MUElementColor.ColorSeparator])
 
 proc muSeparator*() =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
+
   muSeparator(muGlobalContext)
 
 ## Extras/TextSeparator
@@ -232,8 +231,8 @@ proc muTextSeparator*(muCtx: var ref MUContext, text: string) =
   muCtx.muDrawText(font, text, textPos, muCtx.style.colors[MUElementColor.ColorText])
 
 proc muTextSeparator*(text: string) =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
+
   muTextSeparator(muGlobalContext, text)
 
 ## Extras/TextLink
@@ -262,12 +261,12 @@ proc muTextLink*(muCtx: var ref MUContext, text: string, url: string) =
   let underlineY = pos.y + th - 1
   muCtx.muDrawRect(rect(textRect.x, underlineY, tw, 1), color)
   
-  if muCtx.mousePressed == ord(MUMouse.Left) and muCtx.focus == id:
+  if muCtx.isPressed(MUMouse.Left) and muCtx.focus == id:
     openDefaultBrowser(url)
 
 proc muTextLink*(text: string, url: string) =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
+
   muTextLink(muGlobalContext, text, url)
 
 
@@ -308,8 +307,8 @@ proc muText*(muCtx: var ref MUContext, text: string, color: MUColor) =
   muLayoutEndColumn(muCtx)
 
 proc muText*(text: string, color: MUColor) =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
+
   muText(muGlobalContext, text, color)
 
 ## Extras/Window (bool)
@@ -330,8 +329,8 @@ proc muBeginWindow*(muCtx: var ref MUContext, title: string, rect: MURect, isOpe
   return true
 
 proc muBeginWindow*(title: string, rect: MURect, isOpen: var bool, opt: int = 0): bool =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
+
   return muBeginWindow(muGlobalContext, title, rect, isOpen, opt)
 
 proc muEndWindow*(muCtx: var ref MUContext, title: string, isOpen: var bool) =
@@ -341,8 +340,8 @@ proc muEndWindow*(muCtx: var ref MUContext, title: string, isOpen: var bool) =
     isOpen = false
 
 proc muEndWindow*(title: string, isOpen: var bool) =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
+
   muEndWindow(muGlobalContext, title, isOpen)
 
 template muWindow*(muCtx: var ref MUContext, title: string, rect: MURect, isOpen: var bool, body: untyped) =
@@ -360,11 +359,11 @@ template muWindow*(muCtx: var ref MUContext, title: string, rect: MURect, isOpen
       muEndWindow(muCtx, title, isOpen)
 
 template muWindow*(title: string, rect: MURect, isOpen: var bool, body: untyped) =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
+
   muWindow(muGlobalContext, title, rect, isOpen, body)
 
 template muWindow*(title: string, rect: MURect, isOpen: var bool, opt: int, body: untyped) =
-  if muGlobalContext == nil:
-    raise newException(ValueError, "microui is not initialised!")
+  assertGlobalContext()
+  
   muWindow(muGlobalContext, title, rect, isOpen, opt, body)
