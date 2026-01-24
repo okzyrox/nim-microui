@@ -1,9 +1,8 @@
-## nim-microui - OpenGL 2.1 (min) / GLFW renderer
+## nim-microui - OpenGL 2.1 (min)
 ## License: MIT
 
 import ../ui
 import glad/gl
-import glfw
 
 const
   BUFFER_SIZE = 16384
@@ -19,9 +18,10 @@ var
   height = 600
   bufIdx = 0
 
-proc initRenderer*() =
-  if not gladLoadGL(getProcAddress):
+proc initRenderer*(procAddress: proc) =
+  if not gladLoadGL(procAddress):
     quit("Error initialising OpenGL")
+  
   glEnable(GL_BLEND)
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
   glDisable(GL_CULL_FACE)
