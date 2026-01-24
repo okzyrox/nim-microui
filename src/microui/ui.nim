@@ -597,6 +597,20 @@ proc isAnyMousePressed*(): bool =
   assertGlobalContext()
   result = muGlobalContext.mousePressed.len > 0
 
+proc isMouseInWindow*(muCtx: var ref MUContext, win: ptr MUContainer): bool =
+  result = overlaps(win.body, muCtx.mousePos)
+
+proc isMouseInWindow*(win: ptr MUContainer): bool =
+  assertGlobalContext()
+  result = overlaps(win.body, muGlobalContext.mousePos)
+
+proc isMouseInRect*(muCtx: var ref MUContext, r: MURect): bool =
+  result = overlaps(r, muCtx.mousePos)
+
+proc isMouseInRect*(r: MURect): bool =
+  assertGlobalContext()
+  result = overlaps(r, muGlobalContext.mousePos)
+
 proc muInputScroll*(muCtx: var ref MUContext, x, y: int) =
   muCtx.scrollDelta.x += x
   muCtx.scrollDelta.y += y

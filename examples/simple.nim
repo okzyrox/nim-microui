@@ -57,6 +57,11 @@ proc testWindow() =
       muLabel(muCtx, $win.rect.x & ", " & $win.rect.y)
       muLabel(muCtx, "Size:")
       muLabel(muCtx, $win.rect.w & ", " & $win.rect.h)
+      when defined(extras):
+        muLabel(muCtx, $muCtx.mousePos.x & ", " & $muCtx.mousePos.y)
+        muLabel(muCtx, "Mouse Pos")
+        muLabel(muCtx, $muCtx.isMouseInWindow(win))
+        muLabel(muCtx, "Mouse in this Window")
     
     if muHeader(muCtx, "Test Buttons", (1 shl ord(MUWindowOption.Expanded))):
       muLayoutRow(muCtx, 3, @[86, -110, -1], 0)
