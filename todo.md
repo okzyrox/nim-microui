@@ -4,7 +4,7 @@
 - [ ] migrate C types to Nim Types
     - [ ] char ptr -> string
     - [ ] keyboard keys -> enum
-    - [ ] mouse buttons -> enum
+    - [x] mouse buttons -> enum
     - [ ] any `int`s used in place of enums that use weird left shift operations
 
 - [ ] fix backspace/del on example
