@@ -306,6 +306,10 @@ proc vec2*(x, y: int): MUVec2 =
   result.x = x
   result.y = y
 
+proc vec2*(x, y: float): MUVec2 =
+  result.x = x.int
+  result.y = y.int
+
 proc rect*(x, y, w, h: int): MURect =
   result.x = x
   result.y = y
@@ -502,6 +506,12 @@ proc muSetFocus*(muCtx: var ref MUContext, id: uint) =
 
 proc muInputMouseMove*(muCtx: var ref MUContext, x, y: int) =
   muCtx.mousePos = vec2(x, y)
+
+proc muInputMouseMove*(muCtx: var ref MUContext, pos: MUVec2) =
+  muCtx.mousePos = pos
+
+proc muInputMouseMove*(muCtx: var ref MUContext, x, y: float) =
+  muCtx.mousePos = vec2(x.int, y.int)
 
 proc muInputMouseDown*(muCtx: var ref MUContext, x, y: int; btn: int) =
   muCtx.muInputMouseMove(x, y)
@@ -715,7 +725,7 @@ proc muDrawText*(muCtx: var ref MUContext, font: MUFont, str: string, pos: MUVec
     return
   if clipped == MUClip.Partial:
     muSetClip(muCtx, muGetClipRect(muCtx))
-  let size = sizeof(MUBaseCommand) + str.len
+  let size = sizeof(MUBaseCommand)
   if muCtx.commandList.index + size <= MICROUI_COMMANDLIST_SIZE:
     {.cast(uncheckedAssign).}:
       let cmd = cast[ptr MUBaseCommand](addr muCtx.commandList.items[muCtx.commandList.index])
@@ -724,10 +734,7 @@ proc muDrawText*(muCtx: var ref MUContext, font: MUFont, str: string, pos: MUVec
       cmd.textPos = pos
       cmd.textColor = color
       cmd.textFont = font
-    let textDest = cast[ptr UncheckedArray[char]](addr cmd.textStr)
-    if str.len > 0:
-      copyMem(textDest, unsafeAddr str[0], str.len)
-    textDest[str.len] = '\0'
+      cmd.textStr = str
     muCtx.commandList.index += size
   if clipped != None:
     muSetClip(muCtx, UnclippedRect)
@@ -1437,6 +1444,16 @@ proc muInputMouseUp*(btn: MUMouse) =
   muInputMouseUp(muGlobalContext, btn)
 
 proc muInputMouseMove*(x, y: int) =
+  assertGlobalContext()
+  
+  muInputMouseMove(muGlobalContext, x, y)
+
+proc muInputMouseMove*(pos: MUVec2) =
+  assertGlobalContext()
+  
+  muInputMouseMove(muGlobalContext, pos)
+
+proc muInputMouseMove*(x, y: float) =
   assertGlobalContext()
   
   muInputMouseMove(muGlobalContext, x, y)

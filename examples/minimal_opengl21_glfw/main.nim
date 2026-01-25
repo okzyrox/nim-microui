@@ -29,8 +29,8 @@ proc processFrame() =
 
 # GLFW overhead
 proc cursor_pos_cb(window: Window, pos: tuple[x, y: float64]) =
-  let v = vec2(pos.x.int, pos.y.int)
-  muInputMouseMove(muCtx, v.x, v.y)
+  let v = vec2(pos.x, pos.y)
+  muInputMouseMove(muCtx, v)
 
 proc mouse_button_cb(window: Window, b: MouseButton, pressed: bool, mods: set[ModifierKey]) =
   if b == mbLeft:
@@ -103,7 +103,7 @@ proc main() =
     glfw.pollEvents()
     
     let (mx, my) = glfw.cursorPos(window)
-    muInputMouseMove(muCtx, mx.int, my.int)
+    muInputMouseMove(muCtx, mx, my)
     
     processFrame()
     clear(CLEAR_COLOR)
