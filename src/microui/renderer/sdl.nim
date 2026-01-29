@@ -9,10 +9,8 @@ const
 include "atlas"
 
 var
-  atlasSdlTexture: TexturePtr = nil
-  atlasSdlRgba: seq[uint8]
-  width = 800
-  height = 600
+  atlasSdlTexture*: TexturePtr = nil
+  atlasSdlRgba*: seq[uint8]
 
 template sdlFailIf(condition: typed, reason: string) =
   if condition: raise newException(Exception, reason & ": " & $getError())
@@ -41,7 +39,6 @@ proc initRenderer*(window: WindowPtr): RendererPtr =
     atlasSdlRgba[rgbaIdx + 2] = alpha
     atlasSdlRgba[rgbaIdx + 3] = alpha
 
-  discard renderer.setLogicalSize(width.cint, height.cint)
   atlasSdlTexture = renderer.createTexture(
     SDL_PIXELFORMAT_RGBA8888,
     SDL_TEXTUREACCESS_STATIC,
