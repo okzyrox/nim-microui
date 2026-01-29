@@ -20,7 +20,7 @@ var
 
 proc initRenderer*(procAddress: proc) =
   if not gladLoadGL(procAddress):
-    quit("Error initialising OpenGL")
+    quit("Error initialising OpenGL Renderer")
   
   glEnable(GL_BLEND)
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
